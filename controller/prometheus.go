@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type input struct {
@@ -42,10 +43,21 @@ func NewAlertTemplateManager(directory string) (*AlertTemplateManager, error) {
 	return &AlertTemplateManager{templates}, nil
 }
 
-func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) ([]string, error) {
+type Rule struct {
+	rule         string
+	templateName string
+	subject      *v1.ObjectMeta
+}
+
+// used to create keys in configmaps so must be a filename safe form
+func (r *Rule) Key() string {
+	return fmt.Sprintf("%s_%s-%s.rules", r.templateName, r.subject.GetNamespace(), r.subject.GetName())
+}
+
+func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) ([]*Rule, error) {
 	ingressIdentifier := fmt.Sprintf("%s.%s", ingress.Namespace, ingress.Name)
 
-	alerts := []string{}
+	alerts := []*Rule{}
 	i := input{
 		Identifier: ingressIdentifier,
 	}
@@ -65,9 +77,16 @@ func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) ([]str
 		i.Threshold = v
 		var result bytes.Buffer
 		if err := template.Execute(&result, i); err != nil {
-			return []string{}, err
+			return nil, err
 		}
-		alerts = append(alerts, result.String())
+
+		rule := &Rule{
+			rule:         result.String(),
+			templateName: templateName,
+			subject:      &ingress.ObjectMeta,
+		}
+
+		alerts = append(alerts, rule)
 	}
 
 	return alerts, nil

@@ -19,12 +19,14 @@ import (
 )
 
 type options struct {
-	kubeconfig   string
-	namespace    string
-	debug        bool
-	jsonFormat   bool
-	templates    string
-	syncInterval time.Duration
+	kubeconfig         string
+	namespace          string
+	debug              bool
+	jsonFormat         bool
+	templates          string
+	syncInterval       time.Duration
+	configMapName      string
+	configMapNamespace string
 }
 
 func createClientConfig(opts *options) (*rest.Config, error) {
@@ -50,6 +52,8 @@ func main() {
 	kingpin.Flag("json", "Output log data in JSON format").Default("false").BoolVar(&opts.jsonFormat)
 	kingpin.Flag("templates", "Root Directory for the templates").Default("templates").StringVar(&opts.templates)
 	kingpin.Flag("sync-interval", "Synchronise list of Ingress resources this frequently").Default("1m").DurationVar(&opts.syncInterval)
+	kingpin.Flag("configmap-name", "Name of ConfigMap to write alert rules to").Default("heimdall-config").StringVar(&opts.configMapName)
+	kingpin.Flag("configmap-namespace", "Namespace of ConfigMap to write alert rules to").Default("default").StringVar(&opts.configMapNamespace)
 
 	kingpin.Parse()
 
@@ -111,8 +115,7 @@ func main() {
 		},
 	}, cache.Indexers{})
 
-	controller := controller.NewController(templater, queue, indexer, informer)
-
+	controller := controller.NewController(opts.syncInterval, templater, clientSet, opts.configMapNamespace, opts.configMapName, queue, indexer, informer)
 	go informer.Run(ctx.Done())
 	log.Infof("started ingress informer, waiting for cache sync")
 	if !cache.WaitForCacheSync(ctx.Done(), informer.HasSynced) {

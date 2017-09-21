@@ -7,89 +7,94 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 )
 
 //Controller it controls stuff
 type Controller struct {
-	indexer   cache.Indexer
-	queue     workqueue.RateLimitingInterface
-	informer  cache.Controller
-	templater *AlertTemplateManager
+	indexer         cache.Indexer
+	queue           workqueue.RateLimitingInterface
+	informer        cache.Controller
+	templater       *AlertTemplateManager
+	client          *kubernetes.Clientset
+	configNamespace string
+	configName      string
+	syncInterval    time.Duration
 }
 
 //NewController this creates a new controller
-func NewController(templater *AlertTemplateManager, queue workqueue.RateLimitingInterface, indexer cache.Indexer, informer cache.Controller) *Controller {
+func NewController(syncInterval time.Duration, templater *AlertTemplateManager, client *kubernetes.Clientset, configNamespace, configName string, queue workqueue.RateLimitingInterface, indexer cache.Indexer, informer cache.Controller) *Controller {
 	return &Controller{
-		informer:  informer,
-		indexer:   indexer,
-		queue:     queue,
-		templater: templater,
+		syncInterval:    syncInterval,
+		client:          client,
+		informer:        informer,
+		indexer:         indexer,
+		queue:           queue,
+		templater:       templater,
+		configNamespace: configNamespace,
+		configName:      configName,
 	}
 }
 
-func (c *Controller) processNextItem() bool {
-	// Wait until there is a new item in the working queue
-	key, quit := c.queue.Get()
-	if quit {
-		return false
-	}
-	// Tell the queue that we are done with processing this key. This unblocks the key for other workers
-	// This allows safe parallel processing because two Ingresss with the same key are never processed in
-	// parallel.
-	defer c.queue.Done(key)
+func (c *Controller) mapIngressToRules(objects []interface{}) ([]*Rule, error) {
+	rulesToUpdate := make([]*Rule, 0)
 
-	// Invoke the method containing the business logic
-	err := c.syncIngressAlertConfiguration(key.(string))
-	// Handle the error if something went wrong during the execution of the business logic
-	c.handleErr(err, key)
-	return true
+	for _, ingress := range objects {
+		rules, err := c.templater.Create(ingress.(*extensionsv1beta1.Ingress))
+		if err != nil {
+			log.Errorf("error creating rules: %s", err.Error())
+			return nil, err
+		}
+
+		for _, rule := range rules {
+			rulesToUpdate = append(rulesToUpdate, rule)
+		}
+	}
+
+	return rulesToUpdate, nil
 }
 
-// syncToStdout is the business logic of the controller. In this controller it simply prints
-// information about the Ingress to stdout. In case an error happened, it has to simply return the error.
-// The retry logic should not be part of the business logic.
-func (c *Controller) syncIngressAlertConfiguration(key string) error {
-	logger := log.WithField("ingress.key", key)
-
-	obj, exists, err := c.indexer.GetByKey(key)
+func (c *Controller) updateConfigMap(rules []*Rule) error {
+	cm, err := c.client.CoreV1().ConfigMaps(c.configNamespace).Get(c.configName, v1.GetOptions{})
 	if err != nil {
-		logger.Errorf("Fetching object with key %s from store failed with %v", key, err)
+		log.Errorf("error retrieving configmap: %s", err.Error())
 		return err
 	}
 
-	if !exists {
-		logger.Warnf("indexer doesn't contain object or has been deleted, skipping")
-		return nil
+	// we'll clear the configmap each time to ensure we're syncing with our
+	// current state
+	cm.Data = make(map[string]string)
+	for _, rule := range rules {
+		cm.Data[rule.Key()] = rule.rule
 	}
 
-	ingress := obj.(*extensionsv1beta1.Ingress)
-	templates, err := c.templater.Create(ingress)
+	_, err = c.client.CoreV1().ConfigMaps(c.configNamespace).Update(cm)
+
 	if err != nil {
-		logger.Errorf("error creating templates: %s", err)
-		return err
+		log.Errorf("error updating configmap: %s", err.Error())
 	}
 
-	if len(templates) == 0 {
-		logger.Debugf("no alerts created")
+	return err
+}
+
+// called at each interval to update the configmap with all rules
+func (c *Controller) syncRules() {
+	rules, err := c.mapIngressToRules(c.indexer.List())
+	if err != nil {
+		log.Errorf("error mapping to rules: %s", err.Error())
 	}
 
-	for _, template := range templates {
-		logger.Debugf("templated alert: %s", template)
+	err = c.updateConfigMap(rules)
+	if err != nil {
+		log.Errorf("error updating configmap: %s", err.Error())
 	}
 
-	// if !exists {
-	// 	// Below we will warm up our cache with a Ingress, so that we will see a delete for one Ingress
-	// 	fmt.Printf("Ingress %s does not exist anymore\n", key)
-	// } else {
-	// 	// Note that you also have to check the uid if you have a local controlled resource, which
-	// 	// is dependent on the actual instance, to detect that a Ingress was recreated with the same name
-	// 	fmt.Printf("Sync/Add/Update for Ingress %s\n", obj.(*extensionsv1beta1.Ingress).GetName())
-	// }
-	return nil
+	log.Infof("updated rules configmap")
 }
 
 // handleErr checks if an error happened and makes sure we will retry later.
@@ -132,13 +137,8 @@ func (c *Controller) Run(ctx context.Context) {
 		return
 	}
 
-	go wait.Until(c.runWorker, time.Second, ctx.Done())
+	go wait.Until(c.syncRules, c.syncInterval, ctx.Done())
 
 	<-ctx.Done()
 	log.Info("Stopping Ingress Watcher")
-}
-
-func (c *Controller) runWorker() {
-	for c.processNextItem() {
-	}
 }
