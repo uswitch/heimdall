@@ -15,17 +15,19 @@ import (
 
 //Controller it controls stuff
 type Controller struct {
-	indexer  cache.Indexer
-	queue    workqueue.RateLimitingInterface
-	informer cache.Controller
+	indexer   cache.Indexer
+	queue     workqueue.RateLimitingInterface
+	informer  cache.Controller
+	templater *AlertTemplateManager
 }
 
 //NewController this creates a new controller
-func NewController(queue workqueue.RateLimitingInterface, indexer cache.Indexer, informer cache.Controller) *Controller {
+func NewController(templater *AlertTemplateManager, queue workqueue.RateLimitingInterface, indexer cache.Indexer, informer cache.Controller) *Controller {
 	return &Controller{
-		informer: informer,
-		indexer:  indexer,
-		queue:    queue,
+		informer:  informer,
+		indexer:   indexer,
+		queue:     queue,
+		templater: templater,
 	}
 }
 
@@ -41,7 +43,7 @@ func (c *Controller) processNextItem() bool {
 	defer c.queue.Done(key)
 
 	// Invoke the method containing the business logic
-	err := c.syncToStdout(key.(string))
+	err := c.syncIngressAlertConfiguration(key.(string))
 	// Handle the error if something went wrong during the execution of the business logic
 	c.handleErr(err, key)
 	return true
@@ -50,21 +52,43 @@ func (c *Controller) processNextItem() bool {
 // syncToStdout is the business logic of the controller. In this controller it simply prints
 // information about the Ingress to stdout. In case an error happened, it has to simply return the error.
 // The retry logic should not be part of the business logic.
-func (c *Controller) syncToStdout(key string) error {
+func (c *Controller) syncIngressAlertConfiguration(key string) error {
+	logger := log.WithField("ingress.key", key)
+
 	obj, exists, err := c.indexer.GetByKey(key)
 	if err != nil {
-		log.Errorf("Fetching object with key %s from store failed with %v", key, err)
+		logger.Errorf("Fetching object with key %s from store failed with %v", key, err)
 		return err
 	}
 
 	if !exists {
-		// Below we will warm up our cache with a Ingress, so that we will see a delete for one Ingress
-		fmt.Printf("Ingress %s does not exist anymore\n", key)
-	} else {
-		// Note that you also have to check the uid if you have a local controlled resource, which
-		// is dependent on the actual instance, to detect that a Ingress was recreated with the same name
-		fmt.Printf("Sync/Add/Update for Ingress %s\n", obj.(*extensionsv1beta1.Ingress).GetName())
+		logger.Warnf("indexer doesn't contain object or has been deleted, skipping")
+		return nil
 	}
+
+	ingress := obj.(*extensionsv1beta1.Ingress)
+	templates, err := c.templater.Create(ingress)
+	if err != nil {
+		logger.Errorf("error creating templates: %s", err)
+		return err
+	}
+
+	if len(templates) == 0 {
+		logger.Debugf("no alerts created")
+	}
+
+	for _, template := range templates {
+		logger.Debugf("templated alert: %s", template)
+	}
+
+	// if !exists {
+	// 	// Below we will warm up our cache with a Ingress, so that we will see a delete for one Ingress
+	// 	fmt.Printf("Ingress %s does not exist anymore\n", key)
+	// } else {
+	// 	// Note that you also have to check the uid if you have a local controlled resource, which
+	// 	// is dependent on the actual instance, to detect that a Ingress was recreated with the same name
+	// 	fmt.Printf("Sync/Add/Update for Ingress %s\n", obj.(*extensionsv1beta1.Ingress).GetName())
+	// }
 	return nil
 }
 
@@ -101,8 +125,6 @@ func (c *Controller) Run(ctx context.Context) {
 	// Let the workers stop when we are done
 	defer c.queue.ShutDown()
 	log.Info("Starting Ingress Watcher")
-
-	go c.informer.Run(ctx.Done())
 
 	// Wait for all involved caches to be synced, before processing items from the queue is started
 	if !cache.WaitForCacheSync(ctx.Done(), c.informer.HasSynced) {

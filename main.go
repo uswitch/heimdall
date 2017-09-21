@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"os"
+	"os/signal"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/uswitch/heimdall/controller"
@@ -17,10 +19,12 @@ import (
 )
 
 type options struct {
-	kubeconfig string
-	namespace  string
-	debug      bool
-	jsonFormat bool
+	kubeconfig   string
+	namespace    string
+	debug        bool
+	jsonFormat   bool
+	templates    string
+	syncInterval time.Duration
 }
 
 func createClientConfig(opts *options) (*rest.Config, error) {
@@ -39,12 +43,13 @@ func createClientSet(config *rest.Config) (*kubernetes.Clientset, error) {
 }
 
 func main() {
-	fmt.Println("blah")
 	opts := &options{}
 	kingpin.Flag("kubeconfig", "Path to kubeconfig.").StringVar(&opts.kubeconfig)
 	kingpin.Flag("namespace", "Namespace to monitor").Default("").StringVar(&opts.namespace)
 	kingpin.Flag("debug", "Debug mode").BoolVar(&opts.debug)
 	kingpin.Flag("json", "Output log data in JSON format").Default("false").BoolVar(&opts.jsonFormat)
+	kingpin.Flag("templates", "Root Directory for the templates").Default("templates").StringVar(&opts.templates)
+	kingpin.Flag("sync-interval", "Synchronise list of Ingress resources this frequently").Default("1m").DurationVar(&opts.syncInterval)
 
 	kingpin.Parse()
 
@@ -57,6 +62,17 @@ func main() {
 
 	if opts.jsonFormat {
 		log.SetFormatter(&log.JSONFormatter{})
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+
+	templater, err := controller.NewAlertTemplateManager(opts.templates)
+	if err != nil {
+		log.Fatalf("error creating alert template manager: %s", err)
 	}
 
 	config, err := createClientConfig(opts)
@@ -72,7 +88,7 @@ func main() {
 	queue := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
 
 	listWatcher := cache.NewListWatchFromClient(clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", opts.namespace, fields.Everything())
-	indexer, informer := cache.NewIndexerInformer(listWatcher, &extensionsv1beta1.Ingress{}, 0, cache.ResourceEventHandlerFuncs{
+	indexer, informer := cache.NewIndexerInformer(listWatcher, &extensionsv1beta1.Ingress{}, opts.syncInterval, cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			key, err := cache.MetaNamespaceKeyFunc(obj)
 			if err == nil {
@@ -95,11 +111,22 @@ func main() {
 		},
 	}, cache.Indexers{})
 
-	controller := controller.NewController(queue, indexer, informer)
+	controller := controller.NewController(templater, queue, indexer, informer)
 
-	go controller.Run(context.Background())
+	go informer.Run(ctx.Done())
+	log.Infof("started ingress informer, waiting for cache sync")
+	if !cache.WaitForCacheSync(ctx.Done(), informer.HasSynced) {
+		log.Fatalf("error waiting for cache to sync")
+	}
+	for _, item := range indexer.List() {
+		ing := item.(*extensionsv1beta1.Ingress)
+		log.Infof("found ingress %s/%s", ing.GetNamespace(), ing.GetName())
+	}
+	log.Infof("cache synced with %d items, starting controller", len(indexer.List()))
+
+	go controller.Run(ctx)
 
 	// Wait forever
-	select {}
-
+	<-c
+	log.Infof("shutting down")
 }
