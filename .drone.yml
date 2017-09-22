@@ -13,7 +13,7 @@ pipeline:
     commands:
       - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/heimdall
 
-  docker_build:
+  docker-latest:
     image: plugins/docker
     repo: quay.io/uswitch/heimdall
     registry: quay.io
@@ -24,7 +24,7 @@ pipeline:
       event: push
       branch: master
 
-  docker_build:
+  docker-tagged:
     image: plugins/docker
     repo: quay.io/uswitch/heimdall
     registry: quay.io
