@@ -1,5 +1,5 @@
 ALERT ResponseMsecAlert
-  IF nginx_filterzone_request_msecs_avg{filter_key="{{.Identifier}}", filter_name="kubernetes::ingress" } > {{.Threshold}}
+  IF avg(nginx_filterzone_request_msecs_avg{filter_key="{{.Identifier}}", filter_name="kubernetes::ingress" }) > {{.Threshold}}
   FOR 5m
   LABELS { namespace = "{{ .Namespace }}", identifier = "{{.Identifier}}" }
   ANNOTATIONS {
