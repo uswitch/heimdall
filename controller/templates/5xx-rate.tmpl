@@ -1,0 +1,7 @@
+ALERT ServerErrorAlert
+  IF (sum(nginx_responses_total{status_code="5xx", server_zone="{{.Host}}"})/sum(nginx_responses_total{server_zone="{{.Host}}"})) > {{.Threshold}}
+  FOR 1m
+  LABELS { namespace = "{{ .Namespace }}", identifier = "{{.Identifier}}", host = "{{.Host}}", name = "{{.Name}}" }
+  ANNOTATIONS {
+    summary = "{{.Identifier}}: {{.Host}} 5xx proportion above {{.Threshold}} for 1m"
+  }

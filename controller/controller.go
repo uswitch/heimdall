@@ -94,7 +94,9 @@ func (c *Controller) syncRules() {
 		log.Errorf("error updating configmap: %s", err.Error())
 	}
 
-	log.Infof("updated rules configmap")
+	for idx, rule := range rules {
+		log.Debugf("%d synced: %s", idx, rule.rule)
+	}
 }
 
 // forces a sync each time a modification is detected

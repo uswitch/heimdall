@@ -1,7 +1,7 @@
 ALERT ResponseMsecAlert
   IF avg(nginx_filterzone_request_msecs_avg{filter_key="{{.Identifier}}", filter_name="kubernetes::ingress" }) > {{.Threshold}}
   FOR 5m
-  LABELS { namespace = "{{ .Namespace }}", identifier = "{{.Identifier}}" }
+  LABELS { namespace = "{{ .Namespace }}", identifier = "{{.Identifier}}", name = "{{.Name}}" }
   ANNOTATIONS {
-    summary = "Response time for {{.Identifier}} has been above {{.Threshold}} for 5m"
+    summary = "{{.Identifier}}: Response time for has been above {{.Threshold}} for 5m"
   }

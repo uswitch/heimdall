@@ -13,6 +13,10 @@ spec:
       labels:
         app: heimdall
     spec:
+      volumes:
+        - name: templates
+          configMap:
+            name: heimdall-templates
       containers:
       - name: heimdall
         image: quay.io/uswitch/heimdall:latest
@@ -21,3 +25,30 @@ spec:
         - --json
         - --configmap-name=heimdall-config
         - --configmap-namespace=kube-system
+        - --templates=/etc/templates
+        volumeMounts:
+          - name: templates
+            mountPath: /etc/templates
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: heimdall-templates
+  namespace: kube-system
+data:
+  5xx-rate.tmpl: |
+    ALERT ServerErrorAlert
+      IF (sum(nginx_responses_total{status_code="5xx", filter_key="{{.Identifier}}", filter_name="kubernetes::ingress"})/sum(nginx_responses_total{filter_key="{{.Identifier}}", filter_name="kubernetes::ingress"})) > {{.Threshold}}
+      FOR 1m
+      LABELS { namespace = "{{ .Namespace }}", identifier = "{{.Identifier}}" }
+      ANNOTATIONS {
+        summary = "{{.Identifier}} 5xx proportion above {{.Threshold}} for 1m"
+      }
+  response-msec-threshold.tmpl: |
+    ALERT ResponseMsecAlert
+      IF avg(nginx_filterzone_request_msecs_avg{filter_key="{{.Identifier}}", filter_name="kubernetes::ingress" }) > {{.Threshold}}
+      FOR 5m
+      LABELS { namespace = "{{ .Namespace }}", identifier = "{{.Identifier}}" }
+      ANNOTATIONS {
+        summary = "Response time for {{.Identifier}} has been above {{.Threshold}} for 5m"
+      }

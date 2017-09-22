@@ -11,12 +11,6 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-type input struct {
-	Identifier string
-	Threshold  string
-	Namespace  string
-}
-
 //AlertTemplateManager contains a map of all the templates in the given templates folder
 type AlertTemplateManager struct {
 	templates map[string]*template.Template
@@ -58,42 +52,65 @@ func (r *Rule) Key() string {
 	return fmt.Sprintf("%s_%s-%s.rules", r.templateName, r.subject.GetNamespace(), r.subject.GetName())
 }
 
+type templateParameter struct {
+	Identifier string
+	Threshold  string
+	Namespace  string
+	Name       string
+	Host       string
+	Ingress    *extensionsv1beta1.Ingress
+}
+
 //Create makes all the alerts for a given ingress
 func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) ([]*Rule, error) {
 	ingressIdentifier := fmt.Sprintf("%s.%s", ingress.Namespace, ingress.Name)
 
-	alerts := []*Rule{}
-	i := input{
-		Identifier: ingressIdentifier,
-		Namespace:  ingress.Namespace,
+	parameters := make([]*templateParameter, len(ingress.Spec.Rules))
+	for idx, rule := range ingress.Spec.Rules {
+		in := &templateParameter{
+			Ingress:    ingress,
+			Identifier: ingressIdentifier,
+			Namespace:  ingress.Namespace,
+			Name:       ingress.Name,
+			Host:       rule.Host,
+		}
+		parameters[idx] = in
 	}
 
-	annotations := ingress.GetAnnotations()
-	for k, v := range annotations {
-		if !strings.HasPrefix(k, "com.uswitch.heimdall") {
-			continue
-		}
+	alertRules := map[string]*Rule{}
+	for _, params := range parameters {
+		annotations := params.Ingress.GetAnnotations()
+		for k, v := range annotations {
+			if !strings.HasPrefix(k, "com.uswitch.heimdall") {
+				continue
+			}
 
-		templateName := strings.TrimLeft(k, "com.uswitch.heimdall/")
-		template, ok := a.templates[templateName]
-		if !ok {
-			return nil, fmt.Errorf("no template for \"%s\"", templateName)
-		}
+			templateName := strings.TrimLeft(k, "com.uswitch.heimdall/")
+			template, ok := a.templates[templateName]
+			if !ok {
+				return nil, fmt.Errorf("no template for \"%s\"", templateName)
+			}
 
-		i.Threshold = v
-		var result bytes.Buffer
-		if err := template.Execute(&result, i); err != nil {
-			return nil, err
-		}
+			params.Threshold = v
+			var result bytes.Buffer
+			if err := template.Execute(&result, params); err != nil {
+				return nil, err
+			}
 
-		rule := &Rule{
-			rule:         result.String(),
-			templateName: templateName,
-			subject:      &ingress.ObjectMeta,
+			alertRule := &Rule{
+				rule:         result.String(),
+				templateName: templateName,
+				subject:      &ingress.ObjectMeta,
+			}
+			alertRules[alertRule.rule] = alertRule
 		}
-
-		alerts = append(alerts, rule)
 	}
 
-	return alerts, nil
+	ret := make([]*Rule, len(alertRules))
+	idx := 0
+	for _, v := range alertRules {
+		ret[idx] = v
+		idx = idx + 1
+	}
+	return ret, nil
 }
