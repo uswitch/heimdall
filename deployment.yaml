@@ -1,0 +1,23 @@
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: heimdall
+  name: heimdall
+  namespace: kube-system
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: heimdall
+    spec:
+      containers:
+      - name: heimdall
+        image: quay.io/uswitch/heimdall:latest
+        imagePullPolicy: Always
+        args:
+        - --json
+        - --configmap-name=heimdall-config
+        - --configmap-namespace=kube-system
