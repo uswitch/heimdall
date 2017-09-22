@@ -14,12 +14,15 @@ import (
 type input struct {
 	Identifier string
 	Threshold  string
+	Namespace  string
 }
 
+//AlertTemplateManager contains a map of all the templates in the given templates folder
 type AlertTemplateManager struct {
 	templates map[string]*template.Template
 }
 
+//NewAlertTemplateManager creates a new AlertTemplateManager taking a directory as a string
 func NewAlertTemplateManager(directory string) (*AlertTemplateManager, error) {
 	templates := map[string]*template.Template{}
 	templateFiles, err := filepath.Glob(directory + "/*.tmpl")
@@ -43,23 +46,26 @@ func NewAlertTemplateManager(directory string) (*AlertTemplateManager, error) {
 	return &AlertTemplateManager{templates}, nil
 }
 
+//Rule contains the rule, template name and subject
 type Rule struct {
 	rule         string
 	templateName string
 	subject      *v1.ObjectMeta
 }
 
-// used to create keys in configmaps so must be a filename safe form
+//Key used to create keys in configmaps so must be a filename safe form
 func (r *Rule) Key() string {
 	return fmt.Sprintf("%s_%s-%s.rules", r.templateName, r.subject.GetNamespace(), r.subject.GetName())
 }
 
+//Create makes all the alerts for a given ingress
 func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) ([]*Rule, error) {
 	ingressIdentifier := fmt.Sprintf("%s.%s", ingress.Namespace, ingress.Name)
 
 	alerts := []*Rule{}
 	i := input{
 		Identifier: ingressIdentifier,
+		Namespace:  ingress.Namespace,
 	}
 
 	annotations := ingress.GetAnnotations()
