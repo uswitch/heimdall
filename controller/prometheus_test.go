@@ -29,6 +29,11 @@ func TestIngressAnnotations(t *testing.T) {
 			Namespace:   "testificate",
 			Annotations: map[string]string{"com.uswitch.heimdall/response-msec-threshold": "500"},
 		},
+		Spec: extensionsv1beta1.IngressSpec{
+			Rules: []extensionsv1beta1.IngressRule{
+				extensionsv1beta1.IngressRule{Host: "testing.com"},
+			},
+		},
 	}
 
 	if alerts, err := a.Create(ingress); len(alerts) != 1 || err != nil {
