@@ -25,6 +25,13 @@ spec:
         - --configmap-name=heimdall-config
         - --configmap-namespace=kube-system
         - --templates=/etc/templates
+        resources:
+          requests:
+            cpu: 100m
+            memory: 20Mi
+          limits:
+            cpu: 512m
+            memory: 100Mi
         volumeMounts:
           - name: templates
             mountPath: /etc/templates
