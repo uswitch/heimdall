@@ -16,6 +16,7 @@ pipeline:
   docker_build:
     image: plugins/docker
     repo: quay.io/uswitch/heimdall
+    registry: quay.io
     secrets: [ docker_username, docker_password ]
     tags:
       - latest
