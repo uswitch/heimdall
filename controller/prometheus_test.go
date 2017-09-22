@@ -9,20 +9,8 @@ import (
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 )
 
-func TestCreateAlert(t *testing.T) {
-	ingress := &extensionsv1beta1.Ingress{}
-	a, err := NewAlertTemplateManager("templates")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if alerts, err := a.Create(ingress); len(alerts) > 0 || err != nil {
-		t.Fatal("Nil points")
-	}
-}
-
 func TestIngressAnnotations(t *testing.T) {
-	a, _ := NewAlertTemplateManager("templates")
+	a, _ := NewAlertTemplateManager("../example-alert-templates")
 	ingress := &extensionsv1beta1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "testicuffs",
