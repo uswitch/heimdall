@@ -9,12 +9,12 @@ pipeline:
     commands:
       - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/heimdall
 
-   docker_build:
-     image: plugins/docker
-     repo: quay.io/uswitch/heimdall
-     secrets: [ docker_username, docker_password ]
-     tags:
-       - latest
-     when:
-       event: push
-       branch: master
+  docker_build:
+    image: plugins/docker
+    repo: quay.io/uswitch/heimdall
+    secrets: [ docker_username, docker_password ]
+    tags:
+      - latest
+    when:
+      event: push
+      branch: master
