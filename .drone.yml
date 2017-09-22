@@ -4,12 +4,12 @@ workspace:
 
 pipeline:
   test:
-    image: golang:1.8
+    image: golang:1.9
     commands:
       - go test -v -cover $(go list ./... | grep -v /vendor)
 
   build:
-    image: golang:1.8
+    image: golang:1.9
     commands:
       - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/heimdall
 
