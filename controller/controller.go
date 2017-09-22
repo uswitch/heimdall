@@ -97,6 +97,17 @@ func (c *Controller) syncRules() {
 	log.Infof("updated rules configmap")
 }
 
+// forces a sync each time a modification is detected
+func (c *Controller) processUpdateQueue() {
+	key, quit := c.queue.Get()
+	if quit {
+		return
+	}
+
+	defer c.queue.Done(key)
+	c.syncRules()
+}
+
 // handleErr checks if an error happened and makes sure we will retry later.
 func (c *Controller) handleErr(err error, key interface{}) {
 	if err == nil {
@@ -138,6 +149,7 @@ func (c *Controller) Run(ctx context.Context) {
 	}
 
 	go wait.Until(c.syncRules, c.syncInterval, ctx.Done())
+	go wait.Until(c.processUpdateQueue, time.Second, ctx.Done())
 
 	<-ctx.Done()
 	log.Info("Stopping Ingress Watcher")
