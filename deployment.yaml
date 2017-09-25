@@ -44,11 +44,11 @@ metadata:
 data:
   5xx-rate.tmpl: |
     ALERT ServerErrorAlert
-      IF (sum(nginx_responses_total{status_code="5xx", server_zone="{{.Host}}"})/sum(nginx_responses_total{server_zone="{{.Host}}"})) > {{.Threshold}}
+      IF (sum(nginx_filterzone_responses_total{status_code="5xx", filter_key="{{.Identifier}}", filter_name="kubernetes::ingress"})/sum(nginx_filterzone_responses_total{filter_key="{{.Identifier}}", filter_name="kubernetes::ingress"})) > {{.Threshold}}
       FOR 1m
-      LABELS { namespace = "{{ .Namespace }}", identifier = "{{.Identifier}}", host = "{{.Host}}", name = "{{.Name}}" }
+      LABELS { namespace = "{{ .Namespace }}", identifier = "{{.Identifier}}", name = "{{.Name}}" }
       ANNOTATIONS {
-        summary = "{{.Identifier}}: {{.Host}} 5xx proportion above {{.Threshold}} for 1m"
+        summary = "{{.Identifier}}: 5xx proportion above {{.Threshold}} for 1m"
       }
   response-msec-threshold.tmpl: |
     ALERT ResponseMsecAlert

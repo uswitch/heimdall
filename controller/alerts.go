@@ -65,45 +65,39 @@ type templateParameter struct {
 func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) ([]*Rule, error) {
 	ingressIdentifier := fmt.Sprintf("%s.%s", ingress.Namespace, ingress.Name)
 
-	parameters := make([]*templateParameter, len(ingress.Spec.Rules))
-	for idx, rule := range ingress.Spec.Rules {
-		in := &templateParameter{
-			Ingress:    ingress,
-			Identifier: ingressIdentifier,
-			Namespace:  ingress.Namespace,
-			Name:       ingress.Name,
-			Host:       rule.Host,
-		}
-		parameters[idx] = in
+	params := &templateParameter{
+		Ingress:    ingress,
+		Identifier: ingressIdentifier,
+		Namespace:  ingress.Namespace,
+		Name:       ingress.Name,
 	}
 
 	alertRules := map[string]*Rule{}
-	for _, params := range parameters {
-		annotations := params.Ingress.GetAnnotations()
-		for k, v := range annotations {
-			if !strings.HasPrefix(k, "com.uswitch.heimdall") {
-				continue
-			}
+	annotations := params.Ingress.GetAnnotations()
 
-			templateName := strings.TrimLeft(k, "com.uswitch.heimdall/")
-			template, ok := a.templates[templateName]
-			if !ok {
-				return nil, fmt.Errorf("no template for \"%s\"", templateName)
-			}
-
-			params.Threshold = v
-			var result bytes.Buffer
-			if err := template.Execute(&result, params); err != nil {
-				return nil, err
-			}
-
-			alertRule := &Rule{
-				rule:         result.String(),
-				templateName: templateName,
-				subject:      &ingress.ObjectMeta,
-			}
-			alertRules[alertRule.rule] = alertRule
+	for k, v := range annotations {
+		if !strings.HasPrefix(k, "com.uswitch.heimdall") {
+			continue
 		}
+
+		templateName := strings.TrimLeft(k, "com.uswitch.heimdall/")
+		template, ok := a.templates[templateName]
+		if !ok {
+			return nil, fmt.Errorf("no template for \"%s\"", templateName)
+		}
+
+		params.Threshold = v
+		var result bytes.Buffer
+		if err := template.Execute(&result, params); err != nil {
+			return nil, err
+		}
+
+		alertRule := &Rule{
+			rule:         result.String(),
+			templateName: templateName,
+			subject:      &ingress.ObjectMeta,
+		}
+		alertRules[alertRule.rule] = alertRule
 	}
 
 	ret := make([]*Rule, len(alertRules))
