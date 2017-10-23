@@ -1,5 +1,5 @@
 ALERT ServerErrorAlert
-  IF (sum(nginx_filterzone_responses_total{status_code="5xx", filter_key="{{.Identifier}}", filter_name="kubernetes::ingress"})/sum(nginx_filterzone_responses_total{filter_key="{{.Identifier}}", filter_name="kubernetes::ingress"})) > {{.Threshold}}
+  IF (sum(rate(nginx_filterzone_responses_total{status_code="5xx", filter_key="{{.Identifier}}", filter_name="kubernetes::ingress"}[10s]))/sum(rate(nginx_filterzone_responses_total{filter_key="{{.Identifier}}", filter_name="kubernetes::ingress"}[10s]))) > {{.Threshold}}
   FOR 1m
   LABELS { namespace = "{{ .Namespace }}", identifier = "{{.Identifier}}", name = "{{.Name}}" }
   ANNOTATIONS {
