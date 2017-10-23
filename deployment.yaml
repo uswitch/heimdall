@@ -19,7 +19,7 @@ spec:
             name: heimdall-templates
       containers:
       - name: heimdall
-        image: quay.io/uswitch/heimdall:v0.1
+        image: quay.io/uswitch/heimdall:v0.2
         args:
         - --json
         - --configmap-name=heimdall-config
