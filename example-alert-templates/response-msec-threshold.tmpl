@@ -1,7 +1,12 @@
-ALERT ResponseMsecAlert
-  IF avg(nginx_filterzone_request_msecs_avg{filter_key="{{.Identifier}}", filter_name="kubernetes::ingress" }) > {{.Threshold}}
-  FOR 5m
-  LABELS { namespace = "{{ .Namespace }}", identifier = "{{.Identifier}}", name = "{{.Name}}" }
-  ANNOTATIONS {
-    summary = "{{.Identifier}}: Response time for has been above {{.Threshold}} for 5m"
-  }
+groups:
+- name: response-msec-threshold-{{.Identifier}}.rules
+  rules:
+  - alert: ResponseMsecAlert
+    expr: avg(nginx_filterzone_request_msecs_avg{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress"}) > {{.Threshold}}
+    for: 5m
+    labels:
+      identifier: {{.Identifier}}
+      name: {{.Name}}
+      namespace: {{.Namespace}}
+    annotations:
+      summary: '{{.Identifier}}: Response time has been above {{.Threshold}}ms for 5m'

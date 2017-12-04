@@ -1,7 +1,12 @@
-ALERT ServerErrorAlert
-  IF (sum(rate(nginx_filterzone_responses_total{status_code="5xx", filter_key="{{.Identifier}}", filter_name="kubernetes::ingress"}[10s]))/sum(rate(nginx_filterzone_responses_total{filter_key="{{.Identifier}}", filter_name="kubernetes::ingress"}[10s]))) > {{.Threshold}}
-  FOR 1m
-  LABELS { namespace = "{{ .Namespace }}", identifier = "{{.Identifier}}", name = "{{.Name}}" }
-  ANNOTATIONS {
-    summary = "{{.Identifier}}: 5xx proportion above {{.Threshold}} for 1m"
-  }
+groups:
+- name: 5xx-rate-{{.Identifier}}.rules
+  rules:
+  - alert: ServerErrorAlert
+    expr: (sum(rate(nginx_filterzone_responses_total{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress",status_code="5xx"}[10s]))/ sum(rate(nginx_filterzone_responses_total{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress"}[10s]))) > {{.Threshold}}
+    for: 1m
+    labels:
+      identifier: {{.Identifier}}
+      name: {{.Name}}
+      namespace: {{.Namespace}}
+    annotations:
+      summary: '{{.Identifier}}: 5xx proportion above {{.Threshold}} for 1m'

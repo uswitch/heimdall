@@ -43,18 +43,28 @@ metadata:
   namespace: kube-system
 data:
   5xx-rate.tmpl: |
-    ALERT ServerErrorAlert
-      IF (sum(rate(nginx_filterzone_responses_total{status_code="5xx", filter_key="{{.Identifier}}", filter_name="kubernetes::ingress"}[10s]))/sum(rate(nginx_filterzone_responses_total{filter_key="{{.Identifier}}", filter_name="kubernetes::ingress"}[10s]))) > {{.Threshold}}
-      FOR 1m
-      LABELS { namespace = "{{ .Namespace }}", identifier = "{{.Identifier}}", name = "{{.Name}}" }
-      ANNOTATIONS {
-        summary = "{{.Identifier}}: 5xx proportion above {{.Threshold}} for 1m"
-      }
+    groups:
+    - name: 5xx-rate-{{.Identifier}}.rules
+      rules:
+      - alert: ServerErrorAlert
+        expr: (sum(rate(nginx_filterzone_responses_total{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress",status_code="5xx"}[10s]))/ sum(rate(nginx_filterzone_responses_total{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress"}[10s]))) > {{.Threshold}}
+        for: 1m
+        labels:
+          identifier: {{.Identifier}}
+          name: {{.Name}}
+          namespace: {{.Namespace}}
+        annotations:
+          summary: '{{.Identifier}}: 5xx proportion above {{.Threshold}} for 1m'
   response-msec-threshold.tmpl: |
-    ALERT ResponseMsecAlert
-      IF avg(nginx_filterzone_request_msecs_avg{filter_key="{{.Identifier}}", filter_name="kubernetes::ingress" }) > {{.Threshold}}
-      FOR 5m
-      LABELS { namespace = "{{ .Namespace }}", identifier = "{{.Identifier}}", name = "{{.Name}}" }
-      ANNOTATIONS {
-        summary = "{{.Identifier}}: Response time for has been above {{.Threshold}} for 5m"
-      }
+    groups:
+    - name: response-msec-threshold-{{.Identifier}}.rules
+      rules:
+      - alert: ResponseMsecAlert
+        expr: avg(nginx_filterzone_request_msecs_avg{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress"}) > {{.Threshold}}
+        for: 5m
+        labels:
+          identifier: {{.Identifier}}
+          name: {{.Name}}
+          namespace: {{.Namespace}}
+        annotations:
+          summary: '{{.Identifier}}: Response time has been above {{.Threshold}}ms for 5m'
