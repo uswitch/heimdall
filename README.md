@@ -13,7 +13,7 @@ com.uswitch.heimdall/<alert-name>: <alert-threshold>
 ```
 For example:
 ```
-com.uswitch.heimdall/response-msec-threshold: 500
+com.uswitch.heimdall/response-msec-threshold: "500"
 ```
 This will create an alert based on the response-msec-threshold template with a threshold of 500.
 The alert name must match the file name of the template, e.g `response-msec-threshold.tmpl` will have an alert name of `response-msec-threshold`.
