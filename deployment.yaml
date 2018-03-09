@@ -47,7 +47,7 @@ data:
     - name: 5xx-rate-{{.Identifier}}.rules
       rules:
       - alert: ServerErrorAlert
-        expr: (sum(rate(nginx_filterzone_responses_total{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress",status_code="5xx"}[10s]))/ sum(rate(nginx_filterzone_responses_total{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress"}[10s]))) > {{.Threshold}}
+        expr: (sum(rate(nginx_filterzone_responses_total{key="{{.Identifier}}",server_zone="kubernetes::ingress",status_code="5xx"}[10s]))/ sum(rate(nginx_filterzone_responses_total{key="{{.Identifier}}",server_zone="kubernetes::ingress"}[10s]))) > {{.Threshold}}
         for: 1m
         labels:
           identifier: {{.Identifier}}
@@ -60,7 +60,7 @@ data:
     - name: response-msec-threshold-{{.Identifier}}.rules
       rules:
       - alert: ResponseMsecAlert
-        expr: avg(nginx_filterzone_request_msecs_avg{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress"}) > {{.Threshold}}
+        expr: avg(nginx_filterzone_request_msecs_avg{key="{{.Identifier}}",server_zone="kubernetes::ingress"}) > {{.Threshold}}
         for: 5m
         labels:
           identifier: {{.Identifier}}
