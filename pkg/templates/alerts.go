@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/yaml"
 
 	"github.com/uswitch/heimdall/pkg/apis/heimdall.uswitch.com/v1alpha1"
@@ -52,7 +54,7 @@ type templateParameter struct {
 }
 
 //Create makes all the alerts for a given ingress
-func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) (*v1alpha1.AlertList, error) {
+func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) ([]*v1alpha1.Alert, error) {
 	ingressIdentifier := fmt.Sprintf("%s.%s", ingress.Namespace, ingress.Name)
 
 	params := &templateParameter{
@@ -88,17 +90,23 @@ func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) (*v1al
 			return nil, err
 		}
 
+		alert.SetOwnerReferences([]metav1.OwnerReference{
+			*metav1.NewControllerRef(ingress, schema.GroupVersionKind{
+				Group:   extensionsv1beta1.SchemeGroupVersion.Group,
+				Version: extensionsv1beta1.SchemeGroupVersion.Version,
+				Kind:    "Ingress",
+			}),
+		})
+
 		alertRules[alert.ObjectMeta.Name] = alert
 	}
 
-	ret := make([]v1alpha1.Alert, len(alertRules))
+	ret := make([]*v1alpha1.Alert, len(alertRules))
 	idx := 0
 	for _, v := range alertRules {
-		ret[idx] = *v
+		ret[idx] = v
 		idx = idx + 1
 	}
 
-	return &v1alpha1.AlertList{
-		Items: ret,
-	}, nil
+	return ret, nil
 }

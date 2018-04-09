@@ -14,6 +14,7 @@ import (
 
 	clientset "github.com/uswitch/heimdall/pkg/client/clientset/versioned"
 	informers "github.com/uswitch/heimdall/pkg/client/informers/externalversions"
+	"github.com/uswitch/heimdall/pkg/templates"
 )
 
 type options struct {
@@ -75,6 +76,11 @@ func main() {
 		log.Fatalf("Error building alert clientset: %s", err.Error())
 	}
 
+	templateManager, err := templates.NewAlertTemplateManager(opts.templates)
+	if err != nil {
+		log.Fatalf("Error creating template manager: %s", err.Error())
+	}
+
 	namespace := opts.namespace
 	if opts.namespace == "" {
 		namespace = v1.NamespaceAll
@@ -83,7 +89,7 @@ func main() {
 	kubeInformerFactory := kubeinformers.NewFilteredSharedInformerFactory(kubeClient, time.Second*30, namespace, nil)
 	alertInformerFactory := informers.NewFilteredSharedInformerFactory(alertClient, time.Second*30, namespace, nil)
 
-	controller := NewController(kubeClient, alertClient, kubeInformerFactory, alertInformerFactory)
+	controller := NewController(kubeClient, alertClient, kubeInformerFactory, alertInformerFactory, templateManager)
 
 	go kubeInformerFactory.Start(stopCh)
 	go alertInformerFactory.Start(stopCh)

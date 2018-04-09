@@ -23,9 +23,9 @@ func TestIngressAnnotations(t *testing.T) {
 		},
 	}
 
-	if alerts, err := a.Create(ingress); len(alerts.Items) != 1 || err != nil {
+	if alerts, err := a.Create(ingress); len(alerts) != 1 || err != nil {
 		t.Error(err)
-	} else if !strings.Contains(alerts.Items[0].Spec.Expr, "testificate.testicuffs") {
-		t.Error("Unexpected Result : ", alerts.Items[0])
+	} else if !strings.Contains(alerts[0].Spec.Expr, "testificate.testicuffs") {
+		t.Error("Unexpected Result : ", alerts[0])
 	}
 }
