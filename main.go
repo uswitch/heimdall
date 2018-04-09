@@ -1,21 +1,18 @@
 package main
 
 import (
-	"context"
-	"os"
-	"os/signal"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
-	"github.com/uswitch/heimdall/controller"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
-	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
-	"k8s.io/apimachinery/pkg/fields"
+
+	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
-	"k8s.io/client-go/util/workqueue"
+
+	clientset "github.com/uswitch/heimdall/pkg/client/clientset/versioned"
+	informers "github.com/uswitch/heimdall/pkg/client/informers/externalversions"
 )
 
 type options struct {
@@ -34,14 +31,6 @@ func createClientConfig(opts *options) (*rest.Config, error) {
 		return rest.InClusterConfig()
 	}
 	return clientcmd.BuildConfigFromFlags("", opts.kubeconfig)
-}
-
-func createClientSet(config *rest.Config) (*kubernetes.Clientset, error) {
-	c, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		return nil, err
-	}
-	return c, nil
 }
 
 func main() {
@@ -68,68 +57,32 @@ func main() {
 		log.SetFormatter(&log.JSONFormatter{})
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt)
-
-	templater, err := controller.NewAlertTemplateManager(opts.templates)
-	if err != nil {
-		log.Fatalf("error creating alert template manager: %s", err)
-	}
+	stopCh := make(chan struct{}, 1)
 
 	config, err := createClientConfig(opts)
 	if err != nil {
 		log.Fatalf("error creating client config: %s", err)
 	}
 
-	clientSet, err := createClientSet(config)
+	kubeClient, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Fatalf("error creating client: %s", err)
+		log.Fatalf("Error building kubernetes clientset: %s", err.Error())
 	}
 
-	queue := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
-
-	listWatcher := cache.NewListWatchFromClient(clientSet.ExtensionsV1beta1().RESTClient(), "ingresses", opts.namespace, fields.Everything())
-	indexer, informer := cache.NewIndexerInformer(listWatcher, &extensionsv1beta1.Ingress{}, opts.syncInterval, cache.ResourceEventHandlerFuncs{
-		AddFunc: func(obj interface{}) {
-			key, err := cache.MetaNamespaceKeyFunc(obj)
-			if err == nil {
-				queue.Add(key)
-			}
-		},
-		UpdateFunc: func(old interface{}, new interface{}) {
-			key, err := cache.MetaNamespaceKeyFunc(new)
-			if err == nil {
-				queue.Add(key)
-			}
-		},
-		DeleteFunc: func(obj interface{}) {
-			// IndexerInformer uses a delta queue, therefore for deletes we have to use this
-			// key function.
-			key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
-			if err == nil {
-				queue.Add(key)
-			}
-		},
-	}, cache.Indexers{})
-
-	controller := controller.NewController(opts.syncInterval, templater, clientSet, opts.configMapNamespace, opts.configMapName, queue, indexer, informer)
-	go informer.Run(ctx.Done())
-	log.Infof("started ingress informer, waiting for cache sync")
-	if !cache.WaitForCacheSync(ctx.Done(), informer.HasSynced) {
-		log.Fatalf("error waiting for cache to sync")
+	alertClient, err := clientset.NewForConfig(config)
+	if err != nil {
+		log.Fatalf("Error building alert clientset: %s", err.Error())
 	}
-	for _, item := range indexer.List() {
-		ing := item.(*extensionsv1beta1.Ingress)
-		log.Infof("found ingress %s/%s", ing.GetNamespace(), ing.GetName())
+
+	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*30)
+	alertInformerFactory := informers.NewSharedInformerFactory(alertClient, time.Second*30)
+
+	controller := NewController(kubeClient, alertClient, kubeInformerFactory, alertInformerFactory)
+
+	go kubeInformerFactory.Start(stopCh)
+	go alertInformerFactory.Start(stopCh)
+
+	if err = controller.Run(2, stopCh); err != nil {
+		log.Fatalf("Error running controller: %s", err.Error())
 	}
-	log.Infof("cache synced with %d items, starting controller", len(indexer.List()))
-
-	go controller.Run(ctx)
-
-	// Wait forever
-	<-c
-	log.Infof("shutting down")
 }
