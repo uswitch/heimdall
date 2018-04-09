@@ -1,16 +1,15 @@
-package controller
+package templates
 
 import (
 	"strings"
 	"testing"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func TestIngressAnnotations(t *testing.T) {
-	a, _ := NewAlertTemplateManager("../example-alert-templates")
+	a, _ := NewAlertTemplateManager("../../example-alert-templates")
 	ingress := &extensionsv1beta1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "testicuffs",
@@ -24,10 +23,9 @@ func TestIngressAnnotations(t *testing.T) {
 		},
 	}
 
-	if alerts, err := a.Create(ingress); len(alerts) != 1 || err != nil {
+	if alerts, err := a.Create(ingress); len(alerts.Items) != 1 || err != nil {
 		t.Error(err)
-	} else if !strings.Contains(alerts[0].rule, "testificate.testicuffs") {
-		t.Error("Unexpected Result : ", alerts[0])
+	} else if !strings.Contains(alerts.Items[0].Spec.Expr, "testificate.testicuffs") {
+		t.Error("Unexpected Result : ", alerts.Items[0])
 	}
-
 }

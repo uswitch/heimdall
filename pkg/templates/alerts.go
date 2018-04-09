@@ -1,4 +1,4 @@
-package controller
+package templates
 
 import (
 	"bytes"
@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/yaml"
+
+	"github.com/uswitch/heimdall/pkg/apis/heimdall.uswitch.com/v1alpha1"
 )
 
 //AlertTemplateManager contains a map of all the templates in the given templates folder
@@ -40,18 +42,6 @@ func NewAlertTemplateManager(directory string) (*AlertTemplateManager, error) {
 	return &AlertTemplateManager{templates}, nil
 }
 
-//Rule contains the rule, template name and subject
-type Rule struct {
-	rule         string
-	templateName string
-	subject      *v1.ObjectMeta
-}
-
-//Key used to create keys in configmaps so must be a filename safe form
-func (r *Rule) Key() string {
-	return fmt.Sprintf("%s_%s-%s.rules", r.templateName, r.subject.GetNamespace(), r.subject.GetName())
-}
-
 type templateParameter struct {
 	Identifier string
 	Threshold  string
@@ -62,7 +52,7 @@ type templateParameter struct {
 }
 
 //Create makes all the alerts for a given ingress
-func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) ([]*Rule, error) {
+func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) (*v1alpha1.AlertList, error) {
 	ingressIdentifier := fmt.Sprintf("%s.%s", ingress.Namespace, ingress.Name)
 
 	params := &templateParameter{
@@ -72,7 +62,7 @@ func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) ([]*Ru
 		Name:       ingress.Name,
 	}
 
-	alertRules := map[string]*Rule{}
+	alertRules := map[string]*v1alpha1.Alert{}
 	annotations := params.Ingress.GetAnnotations()
 
 	for k, v := range annotations {
@@ -92,19 +82,23 @@ func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) ([]*Ru
 			return nil, err
 		}
 
-		alertRule := &Rule{
-			rule:         result.String(),
-			templateName: templateName,
-			subject:      &ingress.ObjectMeta,
+		alert := &v1alpha1.Alert{}
+
+		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(result.Bytes()), 1024).Decode(alert); err != nil {
+			return nil, err
 		}
-		alertRules[alertRule.rule] = alertRule
+
+		alertRules[alert.ObjectMeta.Name] = alert
 	}
 
-	ret := make([]*Rule, len(alertRules))
+	ret := make([]v1alpha1.Alert, len(alertRules))
 	idx := 0
 	for _, v := range alertRules {
-		ret[idx] = v
+		ret[idx] = *v
 		idx = idx + 1
 	}
-	return ret, nil
+
+	return &v1alpha1.AlertList{
+		Items: ret,
+	}, nil
 }

@@ -1,12 +1,16 @@
-groups:
-- name: response-msec-threshold-{{.Identifier}}.rules
-  rules:
-  - alert: ResponseMsecAlert
-    expr: avg(nginx_filterzone_request_msecs_avg{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress"}) > {{.Threshold}}
-    for: 5m
-    labels:
-      identifier: {{.Identifier}}
-      name: {{.Name}}
-      namespace: {{.Namespace}}
-    annotations:
-      summary: '{{.Identifier}}: Response time has been above {{.Threshold}}ms for 5m'
+---
+apiVersion: heimdall.uswitch.com/v1alpha1
+kind: Alert
+metadata:
+  name: response-msec-threshold-{{.Name}}
+  namesapce: {{.Namespace}}
+  annotations:
+    heimdall.uswitch.com/summary: '{{.Identifier}}: Response time has been above {{.Threshold}}ms for 5m'
+  labels:
+    identifier: {{.Identifier}}
+    name: {{.Name}}
+    namespace: {{.Namespace}}
+spec:
+  expr: |
+    avg(nginx_filterzone_request_msecs_avg{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress"}) > {{.Threshold}}
+  for: 5m
