@@ -6,6 +6,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -74,8 +75,13 @@ func main() {
 		log.Fatalf("Error building alert clientset: %s", err.Error())
 	}
 
-	kubeInformerFactory := kubeinformers.NewSharedInformerFactory(kubeClient, time.Second*30)
-	alertInformerFactory := informers.NewSharedInformerFactory(alertClient, time.Second*30)
+	namespace := opts.namespace
+	if opts.namespace == "" {
+		namespace = v1.NamespaceAll
+	}
+
+	kubeInformerFactory := kubeinformers.NewFilteredSharedInformerFactory(kubeClient, time.Second*30, namespace, nil)
+	alertInformerFactory := informers.NewFilteredSharedInformerFactory(alertClient, time.Second*30, namespace, nil)
 
 	controller := NewController(kubeClient, alertClient, kubeInformerFactory, alertInformerFactory)
 
