@@ -89,12 +89,15 @@ func main() {
 	kubeInformerFactory := kubeinformers.NewFilteredSharedInformerFactory(kubeClient, time.Second*30, namespace, nil)
 	alertInformerFactory := informers.NewFilteredSharedInformerFactory(alertClient, time.Second*30, namespace, nil)
 
-	controller := NewController(kubeClient, alertClient, kubeInformerFactory, alertInformerFactory, templateManager)
+	controller := NewController(
+		kubeClient, alertClient, kubeInformerFactory, alertInformerFactory,
+		templateManager, opts.configMapNamespace, opts.configMapName,
+	)
 
 	go kubeInformerFactory.Start(stopCh)
 	go alertInformerFactory.Start(stopCh)
 
-	if err = controller.Run(2, stopCh); err != nil {
+	if err = controller.Run(stopCh); err != nil {
 		log.Fatalf("Error running controller: %s", err.Error())
 	}
 }

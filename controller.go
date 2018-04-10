@@ -8,6 +8,7 @@ import (
 
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -21,6 +22,7 @@ import (
 	clientset "github.com/uswitch/heimdall/pkg/client/clientset/versioned"
 	informers "github.com/uswitch/heimdall/pkg/client/informers/externalversions"
 	listers "github.com/uswitch/heimdall/pkg/client/listers/heimdall.uswitch.com/v1alpha1"
+	"github.com/uswitch/heimdall/pkg/prometheus"
 	"github.com/uswitch/heimdall/pkg/templates"
 )
 
@@ -28,6 +30,8 @@ type Controller struct {
 	kubeclientset  kubernetes.Interface
 	alertclientset clientset.Interface
 
+	configNamespace string
+	configName      string
 	templateManager *templates.AlertTemplateManager
 
 	ingressLister    extlisters.IngressLister
@@ -35,16 +39,19 @@ type Controller struct {
 	ingressWorkqueue workqueue.RateLimitingInterface
 	alertLister      listers.AlertLister
 	alertSynced      cache.InformerSynced
+	alertWorkqueue   workqueue.RateLimitingInterface
 }
 
-func (c *Controller) enqueueIngress(obj interface{}) {
-	var key string
-	var err error
-	if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
-		runtime.HandleError(err)
-		return
+func enqueueTo(queue workqueue.RateLimitingInterface) func(interface{}) {
+	return func(obj interface{}) {
+		var key string
+		var err error
+		if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
+			runtime.HandleError(err)
+			return
+		}
+		queue.AddRateLimited(key)
 	}
-	c.ingressWorkqueue.AddRateLimited(key)
 }
 
 func NewController(
@@ -52,7 +59,8 @@ func NewController(
 	alertclientset clientset.Interface,
 	kubeInformerFactory kubeinformers.SharedInformerFactory,
 	alertInformerFactory informers.SharedInformerFactory,
-	templateManager *templates.AlertTemplateManager) *Controller {
+	templateManager *templates.AlertTemplateManager,
+	configNamespace, configName string) *Controller {
 
 	ingressInformer := kubeInformerFactory.Extensions().V1beta1().Ingresses()
 	alertInformer := alertInformerFactory.Heimdall().V1alpha1().Alerts()
@@ -66,26 +74,28 @@ func NewController(
 		ingressWorkqueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Ingresses"),
 		alertLister:      alertInformer.Lister(),
 		alertSynced:      alertInformer.Informer().HasSynced,
+		alertWorkqueue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Ingresses"),
+		configNamespace:  configNamespace,
+		configName:       configName,
 	}
 
+	enqueueIngress := enqueueTo(controller.ingressWorkqueue)
+	enqueueAlert := enqueueTo(controller.alertWorkqueue)
+
 	ingressInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: controller.enqueueIngress,
+		AddFunc: enqueueIngress,
 		UpdateFunc: func(_, new interface{}) {
-			controller.enqueueIngress(new)
+			enqueueIngress(new)
 		},
-		DeleteFunc: controller.enqueueIngress,
+		DeleteFunc: enqueueIngress,
 	})
 
 	alertInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: func(_ interface{}) {
-			log.Println("new alert")
+		AddFunc: enqueueAlert,
+		UpdateFunc: func(_, new interface{}) {
+			enqueueAlert(new)
 		},
-		UpdateFunc: func(_, _ interface{}) {
-			log.Println("updated alert")
-		},
-		DeleteFunc: func(_ interface{}) {
-			log.Println("deleted alert")
-		},
+		DeleteFunc: enqueueAlert,
 	})
 
 	return controller
@@ -166,7 +176,39 @@ func (c *Controller) processIngress(namespace, name string) error {
 		}
 	}
 
-	return err
+	return nil
+}
+
+func (c *Controller) processAlert(namespace, name string) error {
+	cm, err := c.kubeclientset.CoreV1().ConfigMaps(c.configNamespace).Get(c.configName, metav1.GetOptions{})
+	if err != nil {
+		log.Errorf("error retrieving configmap: %s", err.Error())
+		return err
+	}
+
+	identifier := fmt.Sprintf("%s-%s.rules", namespace, name)
+
+	if cm.Data == nil {
+		cm.Data = map[string]string{}
+	}
+
+	if alert, err := c.alertLister.Alerts(namespace).Get(name); err != nil {
+		if errors.IsNotFound(err) {
+			delete(cm.Data, identifier)
+		} else {
+			return err
+		}
+	} else {
+		if out, err := prometheus.ToYAML(alert); err != nil {
+			return err
+		} else {
+			cm.Data[identifier] = out
+		}
+	}
+
+	c.kubeclientset.CoreV1().ConfigMaps(c.configNamespace).Update(cm)
+
+	return nil
 }
 
 func runner(workqueue workqueue.RateLimitingInterface, processFn func(string, string) error) func() {
@@ -226,9 +268,10 @@ func runner(workqueue workqueue.RateLimitingInterface, processFn func(string, st
 	}
 }
 
-func (c *Controller) Run(threadiness int, stopCh <-chan struct{}) error {
+func (c *Controller) Run(stopCh <-chan struct{}) error {
 	defer runtime.HandleCrash()
 	defer c.ingressWorkqueue.ShutDown()
+	defer c.alertWorkqueue.ShutDown()
 
 	// Start the informer factories to begin populating the informer caches
 	log.Info("Starting Heimdall")
@@ -240,12 +283,11 @@ func (c *Controller) Run(threadiness int, stopCh <-chan struct{}) error {
 	}
 
 	ingressRunner := runner(c.ingressWorkqueue, c.processIngress)
+	alertRunner := runner(c.alertWorkqueue, c.processAlert)
 
 	log.Info("Starting workers")
-	// Launch two workers to process Foo resources
-	for i := 0; i < threadiness; i++ {
-		go wait.Until(ingressRunner, time.Second, stopCh)
-	}
+	go wait.Until(ingressRunner, time.Second, stopCh)
+	go wait.Until(alertRunner, time.Second, stopCh)
 
 	log.Info("Started workers")
 	<-stopCh
