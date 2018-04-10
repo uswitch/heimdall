@@ -84,16 +84,26 @@ func NewController(
 
 	ingressInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: enqueueIngress,
-		UpdateFunc: func(_, new interface{}) {
-			enqueueIngress(new)
+		UpdateFunc: func(old, new interface{}) {
+			oldObj := old.(*extensionsv1beta1.Ingress)
+			newObj := new.(*extensionsv1beta1.Ingress)
+
+			if newObj.ResourceVersion != oldObj.ResourceVersion {
+				enqueueIngress(new)
+			}
 		},
 		DeleteFunc: enqueueIngress,
 	})
 
 	alertInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: enqueueAlert,
-		UpdateFunc: func(_, new interface{}) {
-			enqueueAlert(new)
+		UpdateFunc: func(old, new interface{}) {
+			oldObj := old.(*v1alpha1.Alert)
+			newObj := new.(*v1alpha1.Alert)
+
+			if newObj.ResourceVersion != oldObj.ResourceVersion {
+				enqueueAlert(new)
+			}
 		},
 		DeleteFunc: enqueueAlert,
 	})
