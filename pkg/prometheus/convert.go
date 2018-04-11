@@ -35,6 +35,15 @@ func ToYAML(alert *v1alpha1.Alert) (string, error) {
 		}
 	}
 
+	labels := map[string]string{}
+
+	for k, v := range alert.GetLabels() {
+		labels[k] = v
+	}
+
+	labels["namespace"] = alert.GetNamespace()
+	labels["name"] = alert.GetName()
+
 	c := container{
 		Groups: []*group{
 			&group{

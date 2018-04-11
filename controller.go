@@ -122,7 +122,7 @@ func (c *Controller) alertsByIngress(ingress *extensionsv1beta1.Ingress) ([]*v1a
 		for _, ownerRef := range ownerRefs {
 			if ownerRef.UID == ingress.GetUID() {
 				filteredAlerts = append(filteredAlerts, alert)
-				continue
+				break
 			}
 		}
 	}
