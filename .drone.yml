@@ -6,6 +6,7 @@ pipeline:
   test:
     image: golang:1.9
     commands:
+      - ./hack/verify-codegen.sh
       - go test -v -cover $(go list ./... | grep -v /vendor)
 
   build:

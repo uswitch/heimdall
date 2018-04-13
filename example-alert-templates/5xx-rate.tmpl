@@ -1,12 +1,14 @@
-groups:
-- name: 5xx-rate-{{.Identifier}}.rules
-  rules:
-  - alert: ServerErrorAlert
-    expr: (sum(rate(nginx_filterzone_responses_total{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress",status_code="5xx"}[10s]))/ sum(rate(nginx_filterzone_responses_total{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress"}[10s]))) > {{.Threshold}}
-    for: 1m
-    labels:
-      identifier: {{.Identifier}}
-      name: {{.Name}}
-      namespace: {{.Namespace}}
-    annotations:
-      summary: '{{.Identifier}}: 5xx proportion above {{.Threshold}} for 1m'
+---
+apiVersion: heimdall.uswitch.com/v1alpha1
+kind: Alert
+metadata:
+  name: {{.Name}}-5xx-rate
+  namesapce: {{.Namespace}}
+  annotations:
+    heimdall.uswitch.com/summary: '{{.Identifier}}: 5xx proportion above {{.Threshold}} for 1m'
+  labels:
+    identifier: {{.Identifier}}
+spec:
+  expr: |
+    (sum(rate(nginx_filterzone_responses_total{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress",status_code="5xx"}[10s]))/ sum(rate(nginx_filterzone_responses_total{filter_key="{{.Identifier}}",filter_name="kubernetes::ingress"}[10s]))) > {{.Threshold}}
+  for: 1m
