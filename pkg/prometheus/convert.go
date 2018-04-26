@@ -30,8 +30,8 @@ func ToYAML(alert *v1alpha1.Alert) (string, error) {
 	filteredAnnotations := map[string]string{}
 
 	for k, v := range alert.GetAnnotations() {
-		if strings.HasPrefix(k, "com.uswitch.heimdall/") {
-			filteredAnnotations[strings.TrimPrefix(k, "com.uswitch.heimdall/")] = v
+		if strings.HasPrefix(k, "heimdall.uswitch.com/") {
+			filteredAnnotations[strings.TrimPrefix(k, "heimdall.uswitch.com/")] = v
 		}
 	}
 
