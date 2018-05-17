@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	corev1 "k8s.io/api/core/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -15,12 +16,43 @@ import (
 	"github.com/uswitch/heimdall/pkg/apis/heimdall.uswitch.com/v1alpha1"
 )
 
-//AlertTemplateManager contains a map of all the templates in the given templates folder
+var heimPrefix = "com.uswitch.heimdall"
+
+// AlertTemplateManager
+// - contains a map of all the templates in the given templates folder
 type AlertTemplateManager struct {
 	templates map[string]*template.Template
 }
 
-//NewAlertTemplateManager creates a new AlertTemplateManager taking a directory as a string
+// templateParameter
+// - struct passed to each alert template
+type templateParameter struct {
+	Identifier string
+	Threshold  string
+	Namespace  string
+	Name       string
+	Host       string
+	Value      string
+	Ingress    *extensionsv1beta1.Ingress
+	Service    *corev1.Service
+}
+
+// collectAlerts
+// - Accepts a map of Alerts and returns Array
+func collectAlerts(alertRules map[string]*v1alpha1.Alert) []*v1alpha1.Alert {
+	ret := make([]*v1alpha1.Alert, len(alertRules))
+
+	idx := 0
+	for _, v := range alertRules {
+		ret[idx] = v
+		idx = idx + 1
+	}
+
+	return ret
+}
+
+// NewAlertTemplateManager
+// - Creates a new AlertTemplateManager taking a directory as a string
 func NewAlertTemplateManager(directory string) (*AlertTemplateManager, error) {
 	templates := map[string]*template.Template{}
 	templateFiles, err := filepath.Glob(directory + "/*.tmpl")
@@ -44,17 +76,9 @@ func NewAlertTemplateManager(directory string) (*AlertTemplateManager, error) {
 	return &AlertTemplateManager{templates}, nil
 }
 
-type templateParameter struct {
-	Identifier string
-	Threshold  string
-	Namespace  string
-	Name       string
-	Host       string
-	Ingress    *extensionsv1beta1.Ingress
-}
-
-//Create makes all the alerts for a given ingress
-func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) ([]*v1alpha1.Alert, error) {
+// CreateFromIngress
+// - Creates all the alerts for a given Ingress
+func (a *AlertTemplateManager) CreateFromIngress(ingress *extensionsv1beta1.Ingress) ([]*v1alpha1.Alert, error) {
 	ingressIdentifier := fmt.Sprintf("%s.%s", ingress.Namespace, ingress.Name)
 
 	params := &templateParameter{
@@ -68,11 +92,11 @@ func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) ([]*v1
 	annotations := params.Ingress.GetAnnotations()
 
 	for k, v := range annotations {
-		if !strings.HasPrefix(k, "com.uswitch.heimdall") {
+		if !strings.HasPrefix(k, heimPrefix) {
 			continue
 		}
 
-		templateName := strings.TrimLeft(k, "com.uswitch.heimdall/")
+		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
 		template, ok := a.templates[templateName]
 		if !ok {
 			return nil, fmt.Errorf("no template for \"%s\"", templateName)
@@ -101,12 +125,57 @@ func (a *AlertTemplateManager) Create(ingress *extensionsv1beta1.Ingress) ([]*v1
 		alertRules[alert.ObjectMeta.Name] = alert
 	}
 
-	ret := make([]*v1alpha1.Alert, len(alertRules))
-	idx := 0
-	for _, v := range alertRules {
-		ret[idx] = v
-		idx = idx + 1
+	return collectAlerts(alertRules), nil
+}
+
+// CreateFromService
+// - Creates all the alerts for a given Service
+func (a *AlertTemplateManager) CreateFromService(svc *corev1.Service) ([]*v1alpha1.Alert, error) {
+	identifier := fmt.Sprintf("%s.%s", svc.Namespace, svc.Name)
+
+	params := &templateParameter{
+		Service:    svc,
+		Identifier: identifier,
+		Namespace:  svc.Namespace,
+		Name:       svc.Name,
 	}
 
-	return ret, nil
+	alertRules := map[string]*v1alpha1.Alert{}
+	annotations := params.Service.GetAnnotations()
+
+	for k, v := range annotations {
+		if !strings.HasPrefix(k, heimPrefix) {
+			continue
+		}
+
+		templateName := strings.TrimPrefix(k, fmt.Sprintf("%s/", heimPrefix))
+		template, ok := a.templates[templateName]
+		if !ok {
+			return nil, fmt.Errorf("no template for \"%s\"", templateName)
+		}
+
+		params.Value = v
+		var result bytes.Buffer
+		if err := template.Execute(&result, params); err != nil {
+			return nil, err
+		}
+
+		alert := &v1alpha1.Alert{}
+
+		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(result.Bytes()), 1024).Decode(alert); err != nil {
+			return nil, err
+		}
+
+		alert.SetOwnerReferences([]metav1.OwnerReference{
+			*metav1.NewControllerRef(svc, schema.GroupVersionKind{
+				Group:   corev1.SchemeGroupVersion.Group,
+				Version: corev1.SchemeGroupVersion.Version,
+				Kind:    "Service",
+			}),
+		})
+
+		alertRules[alert.ObjectMeta.Name] = alert
+	}
+
+	return collectAlerts(alertRules), nil
 }

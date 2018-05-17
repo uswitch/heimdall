@@ -6,14 +6,17 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
+	corev1 "k8s.io/api/core/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	coretypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	corelisters "k8s.io/client-go/listers/core/v1"
 	extlisters "k8s.io/client-go/listers/extensions/v1beta1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
@@ -37,9 +40,19 @@ type Controller struct {
 	ingressLister    extlisters.IngressLister
 	ingressSynced    cache.InformerSynced
 	ingressWorkqueue workqueue.RateLimitingInterface
-	alertLister      listers.AlertLister
-	alertSynced      cache.InformerSynced
-	alertWorkqueue   workqueue.RateLimitingInterface
+
+	alertLister    listers.AlertLister
+	alertSynced    cache.InformerSynced
+	alertWorkqueue workqueue.RateLimitingInterface
+
+	serviceLister    corelisters.ServiceLister
+	serviceSynced    cache.InformerSynced
+	serviceWorkqueue workqueue.RateLimitingInterface
+}
+
+type KubeAlertableObject interface {
+	GetNamespace() string
+	GetUID() coretypes.UID
 }
 
 func enqueueTo(queue workqueue.RateLimitingInterface) func(interface{}) {
@@ -64,24 +77,31 @@ func NewController(
 
 	ingressInformer := kubeInformerFactory.Extensions().V1beta1().Ingresses()
 	alertInformer := alertInformerFactory.Heimdall().V1alpha1().Alerts()
+	serviceInformer := kubeInformerFactory.Core().V1().Services()
 
 	controller := &Controller{
-		kubeclientset:    kubeclientset,
-		alertclientset:   alertclientset,
-		templateManager:  templateManager,
+		kubeclientset:   kubeclientset,
+		alertclientset:  alertclientset,
+		templateManager: templateManager,
+
 		ingressLister:    ingressInformer.Lister(),
 		ingressSynced:    ingressInformer.Informer().HasSynced,
 		ingressWorkqueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Ingresses"),
-		alertLister:      alertInformer.Lister(),
-		alertSynced:      alertInformer.Informer().HasSynced,
-		alertWorkqueue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Ingresses"),
-		configNamespace:  configNamespace,
-		configName:       configName,
+
+		alertLister:    alertInformer.Lister(),
+		alertSynced:    alertInformer.Informer().HasSynced,
+		alertWorkqueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Alerts"),
+
+		serviceLister:    serviceInformer.Lister(),
+		serviceSynced:    serviceInformer.Informer().HasSynced,
+		serviceWorkqueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Services"),
+
+		configNamespace: configNamespace,
+		configName:      configName,
 	}
 
+	// Setup Ingress Informer
 	enqueueIngress := enqueueTo(controller.ingressWorkqueue)
-	enqueueAlert := enqueueTo(controller.alertWorkqueue)
-
 	ingressInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: enqueueIngress,
 		UpdateFunc: func(old, new interface{}) {
@@ -95,6 +115,8 @@ func NewController(
 		DeleteFunc: enqueueIngress,
 	})
 
+	// Setup Alert Informer
+	enqueueAlert := enqueueTo(controller.alertWorkqueue)
 	alertInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: enqueueAlert,
 		UpdateFunc: func(old, new interface{}) {
@@ -108,19 +130,36 @@ func NewController(
 		DeleteFunc: enqueueAlert,
 	})
 
+	// Setup Service Informer
+	enqueueService := enqueueTo(controller.serviceWorkqueue)
+	serviceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: enqueueService,
+		UpdateFunc: func(old, new interface{}) {
+			oldObj := old.(*corev1.Service)
+			newObj := new.(*corev1.Service)
+
+			if newObj.ResourceVersion != oldObj.ResourceVersion {
+				enqueueIngress(new)
+			}
+		},
+		DeleteFunc: enqueueService,
+	})
+
 	return controller
 }
 
-func (c *Controller) alertsByIngress(ingress *extensionsv1beta1.Ingress) ([]*v1alpha1.Alert, error) {
-	alerts, err := c.alertLister.Alerts(ingress.GetNamespace()).List(labels.Everything())
-
+// alertsByObject
+// - Accepts an KubeAlertableObject and returns all it's Alerts
+func (c *Controller) alertsByObject(obj KubeAlertableObject) ([]*v1alpha1.Alert, error) {
 	filteredAlerts := []*v1alpha1.Alert{}
+
+	alerts, err := c.alertLister.Alerts(obj.GetNamespace()).List(labels.Everything())
 
 	for _, alert := range alerts {
 		ownerRefs := alert.GetOwnerReferences()
 
 		for _, ownerRef := range ownerRefs {
-			if ownerRef.UID == ingress.GetUID() {
+			if ownerRef.UID == obj.GetUID() {
 				filteredAlerts = append(filteredAlerts, alert)
 				break
 			}
@@ -142,6 +181,7 @@ func alertsByName(alerts []*v1alpha1.Alert) map[string]*v1alpha1.Alert {
 
 func (c *Controller) processIngress(namespace, name string) error {
 	ingress, err := c.ingressLister.Ingresses(namespace).Get(name)
+
 	if err != nil {
 		if errors.IsNotFound(err) {
 			runtime.HandleError(fmt.Errorf("Ingress '%s.%s' in work queue no longer exists", namespace, name))
@@ -151,42 +191,17 @@ func (c *Controller) processIngress(namespace, name string) error {
 		return err
 	}
 
-	oldAlerts, err := c.alertsByIngress(ingress)
+	oldAlerts, err := c.alertsByObject(ingress)
 	if err != nil {
 		return err
 	}
 
-	newAlerts, err := c.templateManager.Create(ingress)
+	newAlerts, err := c.templateManager.CreateFromIngress(ingress)
 	if err != nil {
 		return err
 	}
 
-	oldAlertsByName := alertsByName(oldAlerts)
-
-	for _, newAlert := range newAlerts {
-		if oldAlert, ok := oldAlertsByName[newAlert.GetName()]; ok {
-			newAlert.SetResourceVersion(oldAlert.GetResourceVersion())
-			if _, err := c.alertclientset.HeimdallV1alpha1().Alerts(namespace).Update(newAlert); err != nil {
-				return err
-			}
-		} else {
-			if _, err := c.alertclientset.HeimdallV1alpha1().Alerts(namespace).Create(newAlert); err != nil {
-				return err
-			}
-		}
-	}
-
-	newAlertsByName := alertsByName(newAlerts)
-
-	for _, oldAlert := range oldAlerts {
-		if _, ok := newAlertsByName[oldAlert.GetName()]; !ok {
-			if err := c.alertclientset.HeimdallV1alpha1().Alerts(namespace).Delete(oldAlert.GetName(), nil); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
+	return c.syncAlerts(namespace, oldAlerts, newAlerts)
 }
 
 func (c *Controller) processAlert(namespace, name string) error {
@@ -221,6 +236,58 @@ func (c *Controller) processAlert(namespace, name string) error {
 	return nil
 }
 
+func (c *Controller) syncAlerts(namespace string, oldAlerts, newAlerts []*v1alpha1.Alert) error {
+	oldAlertsByName := alertsByName(oldAlerts)
+
+	for _, newAlert := range newAlerts {
+		if oldAlert, ok := oldAlertsByName[newAlert.GetName()]; ok {
+			newAlert.SetResourceVersion(oldAlert.GetResourceVersion())
+			if _, err := c.alertclientset.HeimdallV1alpha1().Alerts(namespace).Update(newAlert); err != nil {
+				return err
+			}
+		} else {
+			if _, err := c.alertclientset.HeimdallV1alpha1().Alerts(namespace).Create(newAlert); err != nil {
+				return err
+			}
+		}
+	}
+
+	newAlertsByName := alertsByName(newAlerts)
+
+	for _, oldAlert := range oldAlerts {
+		if _, ok := newAlertsByName[oldAlert.GetName()]; !ok {
+			if err := c.alertclientset.HeimdallV1alpha1().Alerts(namespace).Delete(oldAlert.GetName(), nil); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *Controller) processService(namespace, name string) error {
+	svc, err := c.serviceLister.Services(namespace).Get(name)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			runtime.HandleError(fmt.Errorf("Service '%s.%s' in work queue no longer exists", namespace, name))
+			return nil
+		}
+		return err
+	}
+
+	oldAlerts, err := c.alertsByObject(svc)
+	if err != nil {
+		return err
+	}
+
+	newAlerts, err := c.templateManager.CreateFromService(svc)
+	if err != nil {
+		return err
+	}
+
+	return c.syncAlerts(namespace, oldAlerts, newAlerts)
+}
+
 func runner(workqueue workqueue.RateLimitingInterface, processFn func(string, string) error) func() {
 	return func() {
 		for {
@@ -239,6 +306,7 @@ func runner(workqueue workqueue.RateLimitingInterface, processFn func(string, st
 				// put back on the workqueue and attempted again after a back-off
 				// period.
 				defer workqueue.Done(obj)
+
 				var key string
 				var ok bool
 				// We expect strings to come off the workqueue. These are of the
@@ -259,12 +327,11 @@ func runner(workqueue workqueue.RateLimitingInterface, processFn func(string, st
 				if err != nil {
 					return err
 				}
-				// Run the processFn, passing it the namespace/name string of the
-				// Foo resource to be synced.
+				// Run the processFn, passing it the namespace/name string of the Foo resource to be synced.
 				if err := processFn(namespace, name); err != nil {
 					return fmt.Errorf("error syncing '%s': %s", key, err.Error())
 				}
-				// Finally, if no error occurs we Forget this item so it does not
+				// Finally, no error has occurred; we Forget this item so it does not
 				// get queued again until another change happens.
 				workqueue.Forget(obj)
 				log.Infof("Successfully synced '%s'", key)
@@ -282,6 +349,7 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	defer runtime.HandleCrash()
 	defer c.ingressWorkqueue.ShutDown()
 	defer c.alertWorkqueue.ShutDown()
+	defer c.serviceWorkqueue.ShutDown()
 
 	// Start the informer factories to begin populating the informer caches
 	log.Info("Starting Heimdall")
@@ -294,10 +362,12 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 
 	ingressRunner := runner(c.ingressWorkqueue, c.processIngress)
 	alertRunner := runner(c.alertWorkqueue, c.processAlert)
+	serviceRunner := runner(c.serviceWorkqueue, c.processService)
 
 	log.Info("Starting workers")
 	go wait.Until(ingressRunner, time.Second, stopCh)
 	go wait.Until(alertRunner, time.Second, stopCh)
+	go wait.Until(serviceRunner, time.Second, stopCh)
 
 	log.Info("Started workers")
 	<-stopCh
