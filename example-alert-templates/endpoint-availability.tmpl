@@ -1,0 +1,14 @@
+---
+apiVersion: heimdall.uswitch.com/v1alpha1
+kind: Alert
+metadata:
+  name: {{.Name}}-endpoint-availability
+  namespace: {{.Namespace}}
+  annotations:
+    heimdall.uswitch.com/summary: '{{.Identifier}}: Endpoint unavailable - no addresses assigned'
+  labels:
+    identifier: {{.Identifier}}
+spec:
+  expr: |
+    max(absent(kube_endpoint_address_available{namespace="{{.Namespace}}", endpoint="{{.Name}}"})) > 0
+  for: 1m
