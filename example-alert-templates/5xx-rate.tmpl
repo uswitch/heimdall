@@ -3,7 +3,7 @@ apiVersion: heimdall.uswitch.com/v1alpha1
 kind: Alert
 metadata:
   name: {{.Name}}-5xx-rate
-  namesapce: {{.Namespace}}
+  namespace: {{.Namespace}}
   annotations:
     heimdall.uswitch.com/summary: '{{.Identifier}}: 5xx proportion above {{.Threshold}} for 1m'
   labels:
