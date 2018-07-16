@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	log "github.com/Sirupsen/logrus"
+
 	corev1 "k8s.io/api/core/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -99,19 +101,22 @@ func (a *AlertTemplateManager) CreateFromIngress(ingress *extensionsv1beta1.Ingr
 		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
 		template, ok := a.templates[templateName]
 		if !ok {
-			return nil, fmt.Errorf("no template for \"%s\"", templateName)
+			log.Warnf("[ingress][%s] no template for \"%s\"", ingressIdentifier, templateName)
+			continue
 		}
 
 		params.Threshold = v
 		var result bytes.Buffer
 		if err := template.Execute(&result, params); err != nil {
-			return nil, err
+			log.Warnf("[ingress][%s] error executing template : %s", ingressIdentifier, err)
+			continue
 		}
 
 		alert := &v1alpha1.Alert{}
 
 		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(result.Bytes()), 1024).Decode(alert); err != nil {
-			return nil, err
+			log.Warnf("[ingress][%s] error parsing YAML: %s", ingressIdentifier, err)
+			continue
 		}
 
 		alert.SetOwnerReferences([]metav1.OwnerReference{
@@ -151,19 +156,22 @@ func (a *AlertTemplateManager) CreateFromService(svc *corev1.Service) ([]*v1alph
 		templateName := strings.TrimPrefix(k, fmt.Sprintf("%s/", heimPrefix))
 		template, ok := a.templates[templateName]
 		if !ok {
-			return nil, fmt.Errorf("no template for \"%s\"", templateName)
+			log.Warnf("[service][%s] no template for \"%s\"", identifier, templateName)
+			continue
 		}
 
 		params.Value = v
 		var result bytes.Buffer
 		if err := template.Execute(&result, params); err != nil {
-			return nil, err
+			log.Warnf("[service][%s] error executing template : %s", identifier, err)
+			continue
 		}
 
 		alert := &v1alpha1.Alert{}
 
 		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(result.Bytes()), 1024).Decode(alert); err != nil {
-			return nil, err
+			log.Warnf("[service][%s] error parsing YAML: %s", identifier, err)
+			continue
 		}
 
 		alert.SetOwnerReferences([]metav1.OwnerReference{
