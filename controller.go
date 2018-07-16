@@ -139,7 +139,7 @@ func NewController(
 			newObj := new.(*corev1.Service)
 
 			if newObj.ResourceVersion != oldObj.ResourceVersion {
-				enqueueIngress(new)
+				enqueueService(new)
 			}
 		},
 		DeleteFunc: enqueueService,
