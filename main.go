@@ -11,21 +11,21 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/klog"
 
-	clientset "github.com/uswitch/heimdall/pkg/client/clientset/versioned"
-	informers "github.com/uswitch/heimdall/pkg/client/informers/externalversions"
+	prominformers "github.com/coreos/prometheus-operator/pkg/client/informers/externalversions"
+	promclientset "github.com/coreos/prometheus-operator/pkg/client/versioned"
+
 	"github.com/uswitch/heimdall/pkg/templates"
 )
 
 type options struct {
-	kubeconfig         string
-	namespace          string
-	debug              bool
-	jsonFormat         bool
-	templates          string
-	syncInterval       time.Duration
-	configMapName      string
-	configMapNamespace string
+	kubeconfig   string
+	namespace    string
+	debug        bool
+	jsonFormat   bool
+	templates    string
+	syncInterval time.Duration
 }
 
 func createClientConfig(opts *options) (*rest.Config, error) {
@@ -41,12 +41,12 @@ func main() {
 	kingpin.Flag("namespace", "Namespace to monitor").Default("").StringVar(&opts.namespace)
 	kingpin.Flag("debug", "Debug mode").BoolVar(&opts.debug)
 	kingpin.Flag("json", "Output log data in JSON format").Default("false").BoolVar(&opts.jsonFormat)
-	kingpin.Flag("templates", "Root Directory for the templates").Default("templates").StringVar(&opts.templates)
-	kingpin.Flag("sync-interval", "Synchronise list of Ingress resources this frequently").Default("1m").DurationVar(&opts.syncInterval)
-	kingpin.Flag("configmap-name", "Name of ConfigMap to write alert rules to").Default("heimdall-config").StringVar(&opts.configMapName)
-	kingpin.Flag("configmap-namespace", "Namespace of ConfigMap to write alert rules to").Default("default").StringVar(&opts.configMapNamespace)
-
+	kingpin.Flag("templates", "Directory for the templates").Default("templates").StringVar(&opts.templates)
+	kingpin.Flag("sync-interval", "Synchronize list of Ingress resources this frequently").Default("1m").DurationVar(&opts.syncInterval)
 	kingpin.Parse()
+
+	// Initialize client-go's klog to pick-up default value of logtostderr
+	klog.InitFlags(nil)
 
 	if opts.debug {
 		log.SetLevel(log.DebugLevel)
@@ -71,12 +71,12 @@ func main() {
 		log.Fatalf("Error building kubernetes clientset: %s", err.Error())
 	}
 
-	alertClient, err := clientset.NewForConfig(config)
+	promClient, err := promclientset.NewForConfig(config)
 	if err != nil {
-		log.Fatalf("Error building alert clientset: %s", err.Error())
+		log.Fatalf("Error building prometheus operator clientset: %s", err.Error())
 	}
 
-	templateManager, err := templates.NewAlertTemplateManager(opts.templates)
+	templateManager, err := templates.NewPrometheusRuleTemplateManager(opts.templates)
 	if err != nil {
 		log.Fatalf("Error creating template manager: %s", err.Error())
 	}
@@ -86,16 +86,15 @@ func main() {
 		namespace = v1.NamespaceAll
 	}
 
-	kubeInformerFactory := kubeinformers.NewFilteredSharedInformerFactory(kubeClient, time.Second*30, namespace, nil)
-	alertInformerFactory := informers.NewFilteredSharedInformerFactory(alertClient, time.Second*30, namespace, nil)
+	kubeInformerFactory := kubeinformers.NewFilteredSharedInformerFactory(kubeClient, opts.syncInterval*time.Second, namespace, nil)
+	promInformerFactory := prominformers.NewFilteredSharedInformerFactory(promClient, opts.syncInterval*time.Second, namespace, nil)
 
 	controller := NewController(
-		kubeClient, alertClient, kubeInformerFactory, alertInformerFactory,
-		templateManager, opts.configMapNamespace, opts.configMapName,
+		kubeClient, promClient, kubeInformerFactory, promInformerFactory, templateManager,
 	)
 
 	go kubeInformerFactory.Start(stopCh)
-	go alertInformerFactory.Start(stopCh)
+	go promInformerFactory.Start(stopCh)
 
 	if err = controller.Run(stopCh); err != nil {
 		log.Fatalf("Error running controller: %s", err.Error())
