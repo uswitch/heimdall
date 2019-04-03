@@ -62,7 +62,7 @@ data:
     kind: PrometheusRule
     metadata:
       name: {{.Name}}-5xx-rate
-      namespace: {{.Namespace}}
+      namespace: ingress
       labels:
         role: alert-rules
     spec:
