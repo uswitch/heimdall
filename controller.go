@@ -6,51 +6,42 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
-	corev1 "k8s.io/api/core/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	coretypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
-	corelisters "k8s.io/client-go/listers/core/v1"
 	extlisters "k8s.io/client-go/listers/extensions/v1beta1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 
-	"github.com/uswitch/heimdall/pkg/apis/heimdall.uswitch.com/v1alpha1"
-	clientset "github.com/uswitch/heimdall/pkg/client/clientset/versioned"
-	informers "github.com/uswitch/heimdall/pkg/client/informers/externalversions"
-	listers "github.com/uswitch/heimdall/pkg/client/listers/heimdall.uswitch.com/v1alpha1"
-	"github.com/uswitch/heimdall/pkg/prometheus"
+	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	prominformers "github.com/coreos/prometheus-operator/pkg/client/informers/externalversions"
+	promlisters "github.com/coreos/prometheus-operator/pkg/client/listers/monitoring/v1"
+	promclientset "github.com/coreos/prometheus-operator/pkg/client/versioned"
+
 	"github.com/uswitch/heimdall/pkg/templates"
 )
 
 type Controller struct {
-	kubeclientset  kubernetes.Interface
-	alertclientset clientset.Interface
+	kubeclientset kubernetes.Interface
+	promclientset promclientset.Interface
 
-	configNamespace string
-	configName      string
-	templateManager *templates.AlertTemplateManager
+	templateManager *templates.PrometheusRuleTemplateManager
 
 	ingressLister    extlisters.IngressLister
 	ingressSynced    cache.InformerSynced
 	ingressWorkqueue workqueue.RateLimitingInterface
 
-	alertLister    listers.AlertLister
-	alertSynced    cache.InformerSynced
-	alertWorkqueue workqueue.RateLimitingInterface
-
-	serviceLister    corelisters.ServiceLister
-	serviceSynced    cache.InformerSynced
-	serviceWorkqueue workqueue.RateLimitingInterface
+	promruleLister    promlisters.PrometheusRuleLister
+	promruleSynced    cache.InformerSynced
+	promruleWorkqueue workqueue.RateLimitingInterface
 }
 
-type KubeAlertableObject interface {
+type KubePrometheusRuleableObject interface {
 	GetNamespace() string
 	GetUID() coretypes.UID
 }
@@ -69,35 +60,27 @@ func enqueueTo(queue workqueue.RateLimitingInterface) func(interface{}) {
 
 func NewController(
 	kubeclientset kubernetes.Interface,
-	alertclientset clientset.Interface,
+	promclientset promclientset.Interface,
 	kubeInformerFactory kubeinformers.SharedInformerFactory,
-	alertInformerFactory informers.SharedInformerFactory,
-	templateManager *templates.AlertTemplateManager,
-	configNamespace, configName string) *Controller {
+	promInformerFactory prominformers.SharedInformerFactory,
+
+	templateManager *templates.PrometheusRuleTemplateManager) *Controller {
 
 	ingressInformer := kubeInformerFactory.Extensions().V1beta1().Ingresses()
-	alertInformer := alertInformerFactory.Heimdall().V1alpha1().Alerts()
-	serviceInformer := kubeInformerFactory.Core().V1().Services()
+	promruleInformer := promInformerFactory.Monitoring().V1().PrometheusRules()
 
 	controller := &Controller{
 		kubeclientset:   kubeclientset,
-		alertclientset:  alertclientset,
+		promclientset:   promclientset,
 		templateManager: templateManager,
 
 		ingressLister:    ingressInformer.Lister(),
 		ingressSynced:    ingressInformer.Informer().HasSynced,
 		ingressWorkqueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Ingresses"),
 
-		alertLister:    alertInformer.Lister(),
-		alertSynced:    alertInformer.Informer().HasSynced,
-		alertWorkqueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Alerts"),
-
-		serviceLister:    serviceInformer.Lister(),
-		serviceSynced:    serviceInformer.Informer().HasSynced,
-		serviceWorkqueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Services"),
-
-		configNamespace: configNamespace,
-		configName:      configName,
+		promruleLister:    promruleInformer.Lister(),
+		promruleSynced:    promruleInformer.Informer().HasSynced,
+		promruleWorkqueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "PrometheusRules"),
 	}
 
 	// Setup Ingress Informer
@@ -115,65 +98,50 @@ func NewController(
 		DeleteFunc: enqueueIngress,
 	})
 
-	// Setup Alert Informer
-	enqueueAlert := enqueueTo(controller.alertWorkqueue)
-	alertInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: enqueueAlert,
+	// Setup PrometheusRule Informer
+	enqueuePrometheusRule := enqueueTo(controller.promruleWorkqueue)
+	promruleInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: enqueuePrometheusRule,
 		UpdateFunc: func(old, new interface{}) {
-			oldObj := old.(*v1alpha1.Alert)
-			newObj := new.(*v1alpha1.Alert)
+			oldObj := old.(*monitoringv1.PrometheusRule)
+			newObj := new.(*monitoringv1.PrometheusRule)
 
 			if newObj.ResourceVersion != oldObj.ResourceVersion {
-				enqueueAlert(new)
+				enqueuePrometheusRule(new)
 			}
 		},
-		DeleteFunc: enqueueAlert,
-	})
-
-	// Setup Service Informer
-	enqueueService := enqueueTo(controller.serviceWorkqueue)
-	serviceInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc: enqueueService,
-		UpdateFunc: func(old, new interface{}) {
-			oldObj := old.(*corev1.Service)
-			newObj := new.(*corev1.Service)
-
-			if newObj.ResourceVersion != oldObj.ResourceVersion {
-				enqueueService(new)
-			}
-		},
-		DeleteFunc: enqueueService,
+		DeleteFunc: enqueuePrometheusRule,
 	})
 
 	return controller
 }
 
-// alertsByObject
-// - Accepts an KubeAlertableObject and returns all it's Alerts
-func (c *Controller) alertsByObject(obj KubeAlertableObject) ([]*v1alpha1.Alert, error) {
-	filteredAlerts := []*v1alpha1.Alert{}
+// prometheusRulesByObject
+// - Accepts an KubePrometheusRuleableObject and returns all it's PrometheusRules
+func (c *Controller) prometheusRulesByObject(obj KubePrometheusRuleableObject) ([]*monitoringv1.PrometheusRule, error) {
+	filteredPrometheusRules := []*monitoringv1.PrometheusRule{}
 
-	alerts, err := c.alertLister.Alerts(obj.GetNamespace()).List(labels.Everything())
+	prometheusrules, err := c.promruleLister.PrometheusRules(obj.GetNamespace()).List(labels.Everything())
 
-	for _, alert := range alerts {
-		ownerRefs := alert.GetOwnerReferences()
+	for _, promrule := range prometheusrules {
+		ownerRefs := promrule.GetOwnerReferences()
 
 		for _, ownerRef := range ownerRefs {
 			if ownerRef.UID == obj.GetUID() {
-				filteredAlerts = append(filteredAlerts, alert)
+				filteredPrometheusRules = append(filteredPrometheusRules, promrule)
 				break
 			}
 		}
 	}
 
-	return filteredAlerts, err
+	return filteredPrometheusRules, err
 }
 
-func alertsByName(alerts []*v1alpha1.Alert) map[string]*v1alpha1.Alert {
-	out := map[string]*v1alpha1.Alert{}
+func PrometheusRulesByName(prometheusrules []*monitoringv1.PrometheusRule) map[string]*monitoringv1.PrometheusRule {
+	out := map[string]*monitoringv1.PrometheusRule{}
 
-	for _, alert := range alerts {
-		out[alert.GetName()] = alert
+	for _, promrule := range prometheusrules {
+		out[promrule.GetName()] = promrule
 	}
 
 	return out
@@ -191,101 +159,46 @@ func (c *Controller) processIngress(namespace, name string) error {
 		return err
 	}
 
-	oldAlerts, err := c.alertsByObject(ingress)
+	oldPrometheusRules, err := c.prometheusRulesByObject(ingress)
 	if err != nil {
 		return err
 	}
 
-	newAlerts, err := c.templateManager.CreateFromIngress(ingress)
+	newPrometheusRules, err := c.templateManager.CreateFromIngress(ingress)
 	if err != nil {
 		return err
 	}
 
-	return c.syncAlerts(namespace, oldAlerts, newAlerts)
+	return c.syncPrometheusRules(namespace, oldPrometheusRules, newPrometheusRules)
 }
 
-func (c *Controller) processAlert(namespace, name string) error {
-	cm, err := c.kubeclientset.CoreV1().ConfigMaps(c.configNamespace).Get(c.configName, metav1.GetOptions{})
-	if err != nil {
-		log.Errorf("error retrieving configmap: %s", err.Error())
-		return err
-	}
+func (c *Controller) syncPrometheusRules(namespace string, oldPrometheusRules, newPrometheusRules []*monitoringv1.PrometheusRule) error {
+	oldPrometheusRulesByName := PrometheusRulesByName(oldPrometheusRules)
 
-	identifier := fmt.Sprintf("%s-%s.rules", namespace, name)
-
-	if cm.Data == nil {
-		cm.Data = map[string]string{}
-	}
-
-	if alert, err := c.alertLister.Alerts(namespace).Get(name); err != nil {
-		if errors.IsNotFound(err) {
-			delete(cm.Data, identifier)
-		} else {
-			return err
-		}
-	} else {
-		if out, err := prometheus.ToYAML(alert); err != nil {
-			return err
-		} else {
-			cm.Data[identifier] = out
-		}
-	}
-
-	c.kubeclientset.CoreV1().ConfigMaps(c.configNamespace).Update(cm)
-
-	return nil
-}
-
-func (c *Controller) syncAlerts(namespace string, oldAlerts, newAlerts []*v1alpha1.Alert) error {
-	oldAlertsByName := alertsByName(oldAlerts)
-
-	for _, newAlert := range newAlerts {
-		if oldAlert, ok := oldAlertsByName[newAlert.GetName()]; ok {
-			newAlert.SetResourceVersion(oldAlert.GetResourceVersion())
-			if _, err := c.alertclientset.HeimdallV1alpha1().Alerts(namespace).Update(newAlert); err != nil {
+	for _, newPrometheusRule := range newPrometheusRules {
+		if oldPrometheusRule, ok := oldPrometheusRulesByName[newPrometheusRule.GetName()]; ok {
+			newPrometheusRule.SetResourceVersion(oldPrometheusRule.GetResourceVersion())
+			if _, err := c.promclientset.MonitoringV1().PrometheusRules(namespace).Update(newPrometheusRule); err != nil {
 				return err
 			}
 		} else {
-			if _, err := c.alertclientset.HeimdallV1alpha1().Alerts(namespace).Create(newAlert); err != nil {
+			if _, err := c.promclientset.MonitoringV1().PrometheusRules(namespace).Create(newPrometheusRule); err != nil {
 				return err
 			}
 		}
 	}
 
-	newAlertsByName := alertsByName(newAlerts)
+	newPrometheusRulesByName := PrometheusRulesByName(newPrometheusRules)
 
-	for _, oldAlert := range oldAlerts {
-		if _, ok := newAlertsByName[oldAlert.GetName()]; !ok {
-			if err := c.alertclientset.HeimdallV1alpha1().Alerts(namespace).Delete(oldAlert.GetName(), nil); err != nil {
+	for _, oldPrometheusRule := range oldPrometheusRules {
+		if _, ok := newPrometheusRulesByName[oldPrometheusRule.GetName()]; !ok {
+			if err := c.promclientset.MonitoringV1().PrometheusRules(namespace).Delete(oldPrometheusRule.GetName(), nil); err != nil {
 				return err
 			}
 		}
 	}
 
 	return nil
-}
-
-func (c *Controller) processService(namespace, name string) error {
-	svc, err := c.serviceLister.Services(namespace).Get(name)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			runtime.HandleError(fmt.Errorf("Service '%s.%s' in work queue no longer exists", namespace, name))
-			return nil
-		}
-		return err
-	}
-
-	oldAlerts, err := c.alertsByObject(svc)
-	if err != nil {
-		return err
-	}
-
-	newAlerts, err := c.templateManager.CreateFromService(svc)
-	if err != nil {
-		return err
-	}
-
-	return c.syncAlerts(namespace, oldAlerts, newAlerts)
 }
 
 func runner(workqueue workqueue.RateLimitingInterface, processFn func(string, string) error) func() {
@@ -348,26 +261,21 @@ func runner(workqueue workqueue.RateLimitingInterface, processFn func(string, st
 func (c *Controller) Run(stopCh <-chan struct{}) error {
 	defer runtime.HandleCrash()
 	defer c.ingressWorkqueue.ShutDown()
-	defer c.alertWorkqueue.ShutDown()
-	defer c.serviceWorkqueue.ShutDown()
+	defer c.promruleWorkqueue.ShutDown()
 
 	// Start the informer factories to begin populating the informer caches
 	log.Info("Starting Heimdall")
 
 	// Wait for the caches to be synced before starting workers
 	log.Info("Waiting for informer caches to sync")
-	if ok := cache.WaitForCacheSync(stopCh, c.ingressSynced, c.alertSynced); !ok {
+	if ok := cache.WaitForCacheSync(stopCh, c.ingressSynced, c.promruleSynced); !ok {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
 
 	ingressRunner := runner(c.ingressWorkqueue, c.processIngress)
-	alertRunner := runner(c.alertWorkqueue, c.processAlert)
-	serviceRunner := runner(c.serviceWorkqueue, c.processService)
 
 	log.Info("Starting workers")
 	go wait.Until(ingressRunner, time.Second, stopCh)
-	go wait.Until(alertRunner, time.Second, stopCh)
-	go wait.Until(serviceRunner, time.Second, stopCh)
 
 	log.Info("Started workers")
 	<-stopCh
