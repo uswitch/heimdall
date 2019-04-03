@@ -178,11 +178,11 @@ func (c *Controller) syncPrometheusRules(namespace string, oldPrometheusRules, n
 	for _, newPrometheusRule := range newPrometheusRules {
 		if oldPrometheusRule, ok := oldPrometheusRulesByName[newPrometheusRule.GetName()]; ok {
 			newPrometheusRule.SetResourceVersion(oldPrometheusRule.GetResourceVersion())
-			if _, err := c.promclientset.MonitoringV1().PrometheusRules(namespace).Update(newPrometheusRule); err != nil {
+			if _, err := c.promclientset.MonitoringV1().PrometheusRules(newPrometheusRule.GetNamespace()).Update(newPrometheusRule); err != nil {
 				return err
 			}
 		} else {
-			if _, err := c.promclientset.MonitoringV1().PrometheusRules(namespace).Create(newPrometheusRule); err != nil {
+			if _, err := c.promclientset.MonitoringV1().PrometheusRules(newPrometheusRule.GetNamespace()).Create(newPrometheusRule); err != nil {
 				return err
 			}
 		}
@@ -192,7 +192,7 @@ func (c *Controller) syncPrometheusRules(namespace string, oldPrometheusRules, n
 
 	for _, oldPrometheusRule := range oldPrometheusRules {
 		if _, ok := newPrometheusRulesByName[oldPrometheusRule.GetName()]; !ok {
-			if err := c.promclientset.MonitoringV1().PrometheusRules(namespace).Delete(oldPrometheusRule.GetName(), nil); err != nil {
+			if err := c.promclientset.MonitoringV1().PrometheusRules(oldPrometheusRule.GetNamespace()).Delete(oldPrometheusRule.GetName(), nil); err != nil {
 				return err
 			}
 		}
