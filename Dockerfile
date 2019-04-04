@@ -7,14 +7,14 @@ RUN set -ex; \
     CGO_ENABLED=0 go get github.com/derekparker/delve/cmd/dlv;
 
 WORKDIR /
-ADD bin/heimdall heimdall
+COPY bin/heimdall heimdall
 
 ENTRYPOINT ["/go/bin/dlv", "--listen=:40000", "--headless=true", "--api-version=2", "exec", "/heimdall", "--"]
 
 CMD ["--json"]
 
 FROM scratch as release
-ADD bin/heimdall heimdall
+COPY bin/heimdall heimdall
 
 ENTRYPOINT ["/heimdall"]
 
