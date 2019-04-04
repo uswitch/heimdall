@@ -19,7 +19,7 @@ spec:
       serviceAccountName: heimdall
       containers:
       - name: heimdall
-        image: quay.io/uswitch/heimdall:v0.5.0
+        image: quay.io/uswitch/heimdall:v0.5.2
         args:
         - --json
         resources:
@@ -61,13 +61,13 @@ data:
     apiVersion: monitoring.coreos.com/v1
     kind: PrometheusRule
     metadata:
-      name: {{.Name}}-5xx-rate
+      name: {{.Namespace}}-{{.Name}}-5xx-rate
       namespace: ingress
       labels:
         role: alert-rules
     spec:
       groups:
-      - name: {{.Name}}-5xx-rate.rules
+      - name: {{.Namespace}}-{{.Name}}-5xx-rate.rules
         rules:
         - alert: {{.Name}}-5xx-rate
           annotations:
