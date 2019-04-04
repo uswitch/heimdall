@@ -16,6 +16,7 @@ pipeline:
   docker-latest:
     image: plugins/docker
     repo: quay.io/uswitch/heimdall
+    target: release
     registry: quay.io
     secrets: [ docker_username, docker_password ]
     tags:
@@ -27,6 +28,7 @@ pipeline:
   docker-tagged:
     image: plugins/docker
     repo: quay.io/uswitch/heimdall
+    target: release
     registry: quay.io
     secrets: [ docker_username, docker_password ]
     tags:
