@@ -8,8 +8,8 @@ import (
 
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
-	coretypes "k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	kubeinformers "k8s.io/client-go/informers"
@@ -39,11 +39,6 @@ type Controller struct {
 	promruleLister    promlisters.PrometheusRuleLister
 	promruleSynced    cache.InformerSynced
 	promruleWorkqueue workqueue.RateLimitingInterface
-}
-
-type KubePrometheusRuleableObject interface {
-	GetNamespace() string
-	GetUID() coretypes.UID
 }
 
 func enqueueTo(queue workqueue.RateLimitingInterface) func(interface{}) {
@@ -116,18 +111,18 @@ func NewController(
 	return controller
 }
 
-// prometheusRulesByObject
-// - Accepts an KubePrometheusRuleableObject and returns all it's PrometheusRules
-func (c *Controller) prometheusRulesByObject(obj KubePrometheusRuleableObject) ([]*monitoringv1.PrometheusRule, error) {
+// prometheusRulesByIngress
+// - Accepts an prometheusRulesByIngress and returns all it's PrometheusRules
+func (c *Controller) prometheusRulesByIngress(ingress *extensionsv1beta1.Ingress) ([]*monitoringv1.PrometheusRule, error) {
 	filteredPrometheusRules := []*monitoringv1.PrometheusRule{}
 
-	prometheusrules, err := c.promruleLister.PrometheusRules(obj.GetNamespace()).List(labels.Everything())
+	prometheusrules, err := c.promruleLister.List(labels.Everything())
 
 	for _, promrule := range prometheusrules {
 		ownerRefs := promrule.GetOwnerReferences()
 
 		for _, ownerRef := range ownerRefs {
-			if ownerRef.UID == obj.GetUID() {
+			if ownerRef.UID == ingress.GetUID() {
 				filteredPrometheusRules = append(filteredPrometheusRules, promrule)
 				break
 			}
@@ -137,11 +132,15 @@ func (c *Controller) prometheusRulesByObject(obj KubePrometheusRuleableObject) (
 	return filteredPrometheusRules, err
 }
 
-func PrometheusRulesByName(prometheusrules []*monitoringv1.PrometheusRule) map[string]*monitoringv1.PrometheusRule {
+func GetObjectMetaKey(meta metav1.Object) string {
+	return meta.GetNamespace() + meta.GetName()
+}
+
+func PrometheusRulesByKey(prometheusrules []*monitoringv1.PrometheusRule) map[string]*monitoringv1.PrometheusRule {
 	out := map[string]*monitoringv1.PrometheusRule{}
 
 	for _, promrule := range prometheusrules {
-		out[promrule.GetName()] = promrule
+		out[GetObjectMetaKey(promrule)] = promrule
 	}
 
 	return out
@@ -159,7 +158,7 @@ func (c *Controller) processIngress(namespace, name string) error {
 		return err
 	}
 
-	oldPrometheusRules, err := c.prometheusRulesByObject(ingress)
+	oldPrometheusRules, err := c.prometheusRulesByIngress(ingress)
 	if err != nil {
 		return err
 	}
@@ -169,14 +168,14 @@ func (c *Controller) processIngress(namespace, name string) error {
 		return err
 	}
 
-	return c.syncPrometheusRules(namespace, oldPrometheusRules, newPrometheusRules)
+	return c.syncPrometheusRules(oldPrometheusRules, newPrometheusRules)
 }
 
-func (c *Controller) syncPrometheusRules(namespace string, oldPrometheusRules, newPrometheusRules []*monitoringv1.PrometheusRule) error {
-	oldPrometheusRulesByName := PrometheusRulesByName(oldPrometheusRules)
+func (c *Controller) syncPrometheusRules(oldPrometheusRules, newPrometheusRules []*monitoringv1.PrometheusRule) error {
+	oldPrometheusRulesByKey := PrometheusRulesByKey(oldPrometheusRules)
 
 	for _, newPrometheusRule := range newPrometheusRules {
-		if oldPrometheusRule, ok := oldPrometheusRulesByName[newPrometheusRule.GetName()]; ok {
+		if oldPrometheusRule, ok := oldPrometheusRulesByKey[GetObjectMetaKey(newPrometheusRule)]; ok {
 			newPrometheusRule.SetResourceVersion(oldPrometheusRule.GetResourceVersion())
 			if _, err := c.promclientset.MonitoringV1().PrometheusRules(newPrometheusRule.GetNamespace()).Update(newPrometheusRule); err != nil {
 				return err
@@ -188,10 +187,10 @@ func (c *Controller) syncPrometheusRules(namespace string, oldPrometheusRules, n
 		}
 	}
 
-	newPrometheusRulesByName := PrometheusRulesByName(newPrometheusRules)
+	newPrometheusRulesByKey := PrometheusRulesByKey(newPrometheusRules)
 
 	for _, oldPrometheusRule := range oldPrometheusRules {
-		if _, ok := newPrometheusRulesByName[oldPrometheusRule.GetName()]; !ok {
+		if _, ok := newPrometheusRulesByKey[GetObjectMetaKey(oldPrometheusRule)]; !ok {
 			if err := c.promclientset.MonitoringV1().PrometheusRules(oldPrometheusRule.GetNamespace()).Delete(oldPrometheusRule.GetName(), nil); err != nil {
 				return err
 			}
