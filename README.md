@@ -58,3 +58,9 @@ Your monitoring pipeline would likely depend on Prometheus Operator to:
 --templates="templates"  Directory for the templates
 --sync-interval=1m       Synchronize list of Ingress resources this frequently
 ```
+
+## Migration to v0.5+
+
+In the past, Heimdall relied on its own Alerts type to manage Prometheus rules.  
+Since version v0.5 Heimdall no longer support custom Alerts type in favor of more widespread PrometheusRule CRD from the prometheus-operator project.  
+You can find a simple script which accepts an Alerts YAML to stdin and prints a PrometheusRules YAML into stdout in contrib folder: [convert-alerts-to-promrules.py](./contrib/convert-alerts-to-promrules.py)
