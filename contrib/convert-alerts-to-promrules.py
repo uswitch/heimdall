@@ -36,10 +36,8 @@ for alert in alerts:
         }
     }
 
-    identifier = alert.get('metadata', []).get(
-        'labels', {}).get('identifier', {})
-    if identifier:
-        promrule['spec']['groups'][0]['rules'][0]['labels']['identifier'] = identifier
+    for label_name, label_value in alert.get('metadata', []).get('labels', {}).items():
+        promrule['spec']['groups'][0]['rules'][0]['labels'][label_name] = label_value
 
     promrules.append(promrule)
 
