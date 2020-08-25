@@ -1,0 +1,216 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: heimdall
+  name: heimdall-templates
+  namespace: monitoring
+  annotations:
+    cloud.rvu.ontology/relation.v1.is_part_of: "/rvu/airship/observability/alerting"
+data:
+  5xx-rate.tmpl: |
+    ---
+    apiVersion: monitoring.coreos.com/v1
+    kind: PrometheusRule
+    metadata:
+      name: {{.Namespace}}-{{.Name}}-5xx-rate
+      namespace: ingress
+      labels:
+        prometheus: ingress
+        role: alert-rules
+    spec:
+      groups:
+      - name: {{.Namespace}}-{{.Name}}-5xx-rate.rules
+        rules:
+        - alert: {{.Name}}-5xx-rate
+          annotations:
+            summary: |
+              {{.Identifier}}: 5xx proportion above {{.Threshold}} for 1m
+          expr: |
+            (
+              sum(
+                rate(
+                  nginx_ingress_controller_requests{exported_namespace="{{.Namespace}}",ingress="{{.Name}}",status=~"5.."}[30s]
+                )
+              )
+              /
+              sum(
+                rate(
+                  nginx_ingress_controller_requests{exported_namespace="{{.Namespace}}",ingress="{{.Name}}"}[30s]
+                )
+              )
+            ) > {{.Threshold}}
+          for: 1m
+          labels:
+            identifier: {{.Identifier}}
+            name: {{.Name}}-5xx-rate
+            namespace: {{.Namespace}}
+  5xx-rate-deployment.tmpl: |
+    ---
+    apiVersion: monitoring.coreos.com/v1
+    kind: PrometheusRule
+    metadata:
+      name: {{.Namespace}}-{{.Name}}-5xx-rate-deployment
+      namespace: {{.Namespace}}
+      labels:
+        prometheus: ingress
+        role: alert-rules
+    spec:
+      groups:
+      - name: {{.Namespace}}-{{.Name}}-5xx-rate-deployment.rules
+        rules:
+        - alert: {{.Name}}-5xx-rate-deployment
+          annotations:
+            summary: |
+              {{.Identifier}}: 5xx proportion above {{.Threshold}} for 1m
+          expr: |
+            (
+              sum(
+                rate(
+                  http_requests_total{namespace="{{.Namespace}}",app="{{.Selector}}",status=~"5.."}[30s]
+                )
+              )
+              /
+              sum(
+                rate(
+                  http_requests_total{namespace="{{.Namespace}}",app="{{.Selector}}"}[30s]
+                )
+              )
+            ) > {{.Threshold}}
+          for: 1m
+          labels:
+            identifier: {{.Identifier}}
+            name: {{.Name}}-5xx-rate-deployment
+            namespace: {{.Namespace}}
+            deployment: {{.Name}}
+  4xx-rate-deployment.tmpl: |
+    ---
+    apiVersion: monitoring.coreos.com/v1
+    kind: PrometheusRule
+    metadata:
+      name: {{.Namespace}}-{{.Name}}-4xx-rate-deployment
+      namespace: {{.Namespace}}
+      labels:
+        prometheus: ingress
+        role: alert-rules
+    spec:
+      groups:
+      - name: {{.Namespace}}-{{.Name}}-4xx-rate-deployment.rules
+        rules:
+        - alert: {{.Name}}-4xx-rate-deployment
+          annotations:
+            summary: |
+              {{.Identifier}}: 4xx proportion above {{.Threshold}} for 1m
+          expr: |
+            (
+              sum(
+                rate(
+                  http_requests_total{namespace="{{.Namespace}}",app="{{.Selector}}",status=~"4.."}[30s]
+                )
+              )
+              /
+              sum(
+                rate(
+                  http_requests_total{namespace="{{.Namespace}}",app="{{.Selector}}"}[30s]
+                )
+              )
+            ) > {{.Threshold}}
+          for: 1m
+          labels:
+            identifier: {{.Identifier}}
+            name: {{.Name}}-4xx-rate-deployment
+            namespace: {{.Namespace}}
+            deployment: {{.Name}}
+  p95-deployment.tmpl: |
+    ---
+    apiVersion: monitoring.coreos.com/v1
+    kind: PrometheusRule
+    metadata:
+      name: {{.Namespace}}-{{.Name}}-p95-deployment
+      namespace: {{.Namespace}}
+      labels:
+        role: alert-rules
+    spec:
+      groups:
+      - name: {{.Namespace}}-{{.Name}}-p95-deployment.rules
+        rules:
+        - alert: {{.Name}}-p95-deployment
+          annotations:
+            summary: |
+              {{.Identifier}}: P95 above {{.Threshold}} for 5m
+          expr: |
+            (
+              histogram_quantile(
+                0.95, sum(
+                  rate(
+                    http_request_duration_seconds_bucket{namespace="{{.Namespace}}",app="{{.Selector}}"}[5m]
+                  )
+                ) by (le)
+              ) ) > {{.Threshold}}
+          for: 1m
+          labels:
+            identifier: {{.Identifier}}
+            name: {{.Name}}-p95-deployment
+            namespace: {{.Namespace}}
+            deployment: {{.Name}}
+  p99-deployment.tmpl: |
+    ---
+    apiVersion: monitoring.coreos.com/v1
+    kind: PrometheusRule
+    metadata:
+      name: {{.Namespace}}-{{.Name}}-p99-deployment
+      namespace: {{.Namespace}}
+      labels:
+        role: alert-rules
+    spec:
+      groups:
+      - name: {{.Namespace}}-{{.Name}}-p99-deployment.rules
+        rules:
+        - alert: {{.Name}}-p99-deployment
+          annotations:
+            summary: |
+              {{.Identifier}}: P99 above {{.Threshold}} for 5m
+          expr: |
+            (
+              histogram_quantile(
+                0.99, sum(
+                  rate(
+                    http_request_duration_seconds_bucket{namespace="{{.Namespace}}",app="{{.Selector}}"}[5m]
+                  )
+                ) by (le)
+              ) ) > {{.Threshold}}
+          for: 1m
+          labels:
+            identifier: {{.Identifier}}
+            name: {{.Name}}-p99-deployment
+            namespace: {{.Namespace}}
+            deployment: {{.Name}}
+  p99-deployment.tmpl: |
+    --- 
+    apiVersion: monitoring.coreos.com/v1
+    kind: PrometheusRule
+    metadata:
+      name: {{.Namespace}}-{{.Name}}-replicas-availability-deployment
+      namespace: {{.Namespace}}
+      labels:
+        prometheus: kube-system
+        role: alert-rules
+    spec:
+      groups:
+      - name: {{.Namespace}}-{{.Name}}-replicas-availability-deployment.rules
+        rules:
+        - alert: {{.Name}}-replicas-availability-deployment
+          annotations:
+            summary: |
+              {{.Identifier}}: Availability proportion over the requested amount of replicas {{.Threshold}} for 5m
+          expr: |
+            kube_deployment_status_replicas_available{namespace="{{.Namespace}}", deployment="{{.Name}}"} 
+            /  
+            kube_deployment_spec_replicas{namespace="{{.Namespace}}", deployment="{{.Name}}"} > {{.Threshold}}
+          for: 5m
+          labels:
+            identifier: {{.Identifier}}
+            name: {{.Name}}-replicas-availability-deployment
+            namespace: {{.Namespace}}
+            deployment: {{.Name}}

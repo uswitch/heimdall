@@ -1,0 +1,9 @@
+apiVersion: skaffold/v2beta4
+kind: Config
+build:
+  artifacts:
+  - image: quay.io/uswitch/heimdall-skaffold
+deploy:
+  kustomize:
+    paths:
+    - kube/overlays/skaffold

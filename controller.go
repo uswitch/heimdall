@@ -6,6 +6,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
+	apps "k8s.io/api/apps/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -14,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/wait"
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
+	lister "k8s.io/client-go/listers/apps/v1"
 	extlisters "k8s.io/client-go/listers/extensions/v1beta1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
@@ -35,6 +37,10 @@ type Controller struct {
 	ingressLister    extlisters.IngressLister
 	ingressSynced    cache.InformerSynced
 	ingressWorkqueue workqueue.RateLimitingInterface
+
+	deploymentLister    lister.DeploymentLister
+	deploymentSynced    cache.InformerSynced
+	deploymentWorkqueue workqueue.RateLimitingInterface
 
 	promruleLister    promlisters.PrometheusRuleLister
 	promruleSynced    cache.InformerSynced
@@ -62,6 +68,7 @@ func NewController(
 	templateManager *templates.PrometheusRuleTemplateManager) *Controller {
 
 	ingressInformer := kubeInformerFactory.Extensions().V1beta1().Ingresses()
+	deploymentInformer := kubeInformerFactory.Apps().V1().Deployments()
 	promruleInformer := promInformerFactory.Monitoring().V1().PrometheusRules()
 
 	controller := &Controller{
@@ -72,6 +79,10 @@ func NewController(
 		ingressLister:    ingressInformer.Lister(),
 		ingressSynced:    ingressInformer.Informer().HasSynced,
 		ingressWorkqueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Ingresses"),
+
+		deploymentLister:    deploymentInformer.Lister(),
+		deploymentSynced:    deploymentInformer.Informer().HasSynced,
+		deploymentWorkqueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Deployments"),
 
 		promruleLister:    promruleInformer.Lister(),
 		promruleSynced:    promruleInformer.Informer().HasSynced,
@@ -93,6 +104,21 @@ func NewController(
 		DeleteFunc: enqueueIngress,
 	})
 
+	// Setup Deployment Informer
+	enqueueDeployment := enqueueTo(controller.deploymentWorkqueue)
+	deploymentInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc: enqueueDeployment,
+		UpdateFunc: func(old, new interface{}) {
+			oldObj := old.(*apps.Deployment)
+			newObj := new.(*apps.Deployment)
+
+			if newObj.ResourceVersion != oldObj.ResourceVersion {
+				enqueueDeployment(new)
+			}
+		},
+		DeleteFunc: enqueueDeployment,
+	})
+
 	// Setup PrometheusRule Informer
 	enqueuePrometheusRule := enqueueTo(controller.promruleWorkqueue)
 	promruleInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -111,6 +137,7 @@ func NewController(
 	return controller
 }
 
+// minikube -> 1.16
 // prometheusRulesByIngress
 // - Accepts an prometheusRulesByIngress and returns all it's PrometheusRules
 func (c *Controller) prometheusRulesByIngress(ingress *extensionsv1beta1.Ingress) ([]*monitoringv1.PrometheusRule, error) {
@@ -123,6 +150,27 @@ func (c *Controller) prometheusRulesByIngress(ingress *extensionsv1beta1.Ingress
 
 		for _, ownerRef := range ownerRefs {
 			if ownerRef.UID == ingress.GetUID() {
+				filteredPrometheusRules = append(filteredPrometheusRules, promrule)
+				break
+			}
+		}
+	}
+
+	return filteredPrometheusRules, err
+}
+
+// prometheusRulesByDeployment
+// - Accepts an prometheusRulesByDeployment and returns all it's PrometheusRules
+func (c *Controller) prometheusRulesByDeployment(deployment *apps.Deployment) ([]*monitoringv1.PrometheusRule, error) {
+	filteredPrometheusRules := []*monitoringv1.PrometheusRule{}
+
+	prometheusrules, err := c.promruleLister.List(labels.Everything())
+
+	for _, promrule := range prometheusrules {
+		ownerRefs := promrule.GetOwnerReferences()
+
+		for _, ownerRef := range ownerRefs {
+			if ownerRef.UID == deployment.GetUID() {
 				filteredPrometheusRules = append(filteredPrometheusRules, promrule)
 				break
 			}
@@ -164,6 +212,44 @@ func (c *Controller) processIngress(namespace, name string) error {
 	}
 
 	newPrometheusRules, err := c.templateManager.CreateFromIngress(ingress)
+	if err != nil {
+		return err
+	}
+
+	return c.syncPrometheusRules(oldPrometheusRules, newPrometheusRules)
+}
+
+func (c *Controller) processDeployment(namespace, name string) error {
+	deployment, err := c.deploymentLister.Deployments(namespace).Get(name)
+
+	if err != nil {
+		if errors.IsNotFound(err) {
+			runtime.HandleError(fmt.Errorf("Deployment '%s.%s' in work queue no longer exists", namespace, name))
+			return nil
+		}
+
+		return err
+	}
+
+	oldPrometheusRules, err := c.prometheusRulesByDeployment(deployment)
+	if err != nil {
+		return err
+	}
+
+	// We have to look up the namespace to decide which Prometheus instance the Deployment should report to
+	deploymentNamespace, err := c.kubeclientset.CoreV1().Namespaces().Get(deployment.GetNamespace(), metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			runtime.HandleError(fmt.Errorf("We were unable to set the alert as the namespace '%s' doesn't have the prometheus label", namespace))
+			return nil
+		}
+		return err
+	}
+
+	deploymentNamespacePrometheus := deploymentNamespace.GetAnnotations()["prometheus"]
+
+	log.Printf("*********   Chosen prometheus is going to be: %s", deploymentNamespacePrometheus)
+	newPrometheusRules, err := c.templateManager.CreateFromDeployment(deployment, deploymentNamespacePrometheus)
 	if err != nil {
 		return err
 	}
@@ -260,6 +346,7 @@ func runner(workqueue workqueue.RateLimitingInterface, processFn func(string, st
 func (c *Controller) Run(stopCh <-chan struct{}) error {
 	defer runtime.HandleCrash()
 	defer c.ingressWorkqueue.ShutDown()
+	defer c.deploymentWorkqueue.ShutDown()
 	defer c.promruleWorkqueue.ShutDown()
 
 	// Start the informer factories to begin populating the informer caches
@@ -272,9 +359,11 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	}
 
 	ingressRunner := runner(c.ingressWorkqueue, c.processIngress)
+	deploymentRunner := runner(c.deploymentWorkqueue, c.processDeployment)
 
 	log.Info("Starting workers")
 	go wait.Until(ingressRunner, time.Second, stopCh)
+	go wait.Until(deploymentRunner, time.Second, stopCh)
 
 	log.Info("Started workers")
 	<-stopCh

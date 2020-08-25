@@ -9,6 +9,7 @@ import (
 
 	log "github.com/Sirupsen/logrus"
 
+	apps "k8s.io/api/apps/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -27,7 +28,7 @@ type PrometheusRuleTemplateManager struct {
 
 // templateParameter
 // - struct passed to each promrule template
-type templateParameter struct {
+type templateParameterIngress struct {
 	Identifier string
 	Threshold  string
 	Namespace  string
@@ -35,6 +36,19 @@ type templateParameter struct {
 	Host       string
 	Value      string
 	Ingress    *extensionsv1beta1.Ingress
+}
+
+type templateParameterDeployment struct {
+	Identifier          string
+	Threshold           string
+	Namespace           string
+	NamespacePrometheus string
+	Name                string
+	Host                string
+	Value               string
+	Selector            string
+	NSPrometheus        string
+	Deployment          *apps.Deployment
 }
 
 // collectPrometheusRules
@@ -66,9 +80,10 @@ func NewPrometheusRuleTemplateManager(directory string) (*PrometheusRuleTemplate
 			return nil, err
 		}
 
-		templates[strings.TrimRight(filepath.Base(t), ".tmpl")] = tmpl
+		templates[strings.TrimSuffix(filepath.Base(t), ".tmpl")] = tmpl
 	}
 
+	log.Printf("%+v", templates)
 	if len(templates) == 0 {
 		return nil, fmt.Errorf("no templates defined")
 	}
@@ -81,7 +96,7 @@ func NewPrometheusRuleTemplateManager(directory string) (*PrometheusRuleTemplate
 func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1beta1.Ingress) ([]*monitoringv1.PrometheusRule, error) {
 	ingressIdentifier := fmt.Sprintf("%s.%s", ingress.Namespace, ingress.Name)
 
-	params := &templateParameter{
+	params := &templateParameterIngress{
 		Ingress:    ingress,
 		Identifier: ingressIdentifier,
 		Namespace:  ingress.Namespace,
@@ -122,6 +137,64 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1b
 				Group:   extensionsv1beta1.SchemeGroupVersion.Group,
 				Version: extensionsv1beta1.SchemeGroupVersion.Version,
 				Kind:    "Ingress",
+			}),
+		})
+
+		prometheusRules[promrule.ObjectMeta.Name] = promrule
+	}
+
+	return collectPrometheusRules(prometheusRules), nil
+}
+
+// CreateFromDeployment
+// - Creates all the promRules for a given Deployment
+func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.Deployment, depNamespacePrometheus string) ([]*monitoringv1.PrometheusRule, error) {
+	deploymentIdentifier := fmt.Sprintf("%s.%s", deployment.Namespace, deployment.Name)
+
+	params := &templateParameterDeployment{
+		Deployment:   deployment,
+		Identifier:   deploymentIdentifier,
+		Namespace:    deployment.Namespace,
+		Name:         deployment.Name,
+		Selector:     deployment.GetLabels()["app"],
+		NSPrometheus: depNamespacePrometheus,
+	}
+
+	prometheusRules := map[string]*monitoringv1.PrometheusRule{}
+	annotations := params.Deployment.GetAnnotations()
+
+	for k, v := range annotations {
+		if !strings.HasPrefix(k, heimPrefix) {
+			continue
+		}
+
+		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
+		log.Printf("\n *** templateName is: %s", templateName)
+		template, ok := a.templates[templateName]
+		if !ok {
+			log.Warnf("[deployment][%s] no template for \"%s\"", deploymentIdentifier, templateName)
+			continue
+		}
+
+		params.Threshold = v
+		var result bytes.Buffer
+		if err := template.Execute(&result, params); err != nil {
+			log.Warnf("[deployment][%s] error executing template : %s", deploymentIdentifier, err)
+			continue
+		}
+
+		promrule := &monitoringv1.PrometheusRule{}
+
+		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(result.Bytes()), 1024).Decode(promrule); err != nil {
+			log.Warnf("[deployment][%s] error parsing YAML: %s", deploymentIdentifier, err)
+			continue
+		}
+
+		promrule.SetOwnerReferences([]metav1.OwnerReference{
+			*metav1.NewControllerRef(deployment, schema.GroupVersionKind{
+				Group:   apps.SchemeGroupVersion.Group,
+				Version: apps.SchemeGroupVersion.Version,
+				Kind:    "Deployment",
 			}),
 		})
 
