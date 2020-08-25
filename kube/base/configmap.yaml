@@ -186,8 +186,8 @@ data:
             name: {{.Name}}-p99-deployment
             namespace: {{.Namespace}}
             deployment: {{.Name}}
-  p99-deployment.tmpl: |
-    --- 
+  replicas-availability-deployment.tmpl: |
+    ---
     apiVersion: monitoring.coreos.com/v1
     kind: PrometheusRule
     metadata:
@@ -214,3 +214,4 @@ data:
             name: {{.Name}}-replicas-availability-deployment
             namespace: {{.Namespace}}
             deployment: {{.Name}}
+
