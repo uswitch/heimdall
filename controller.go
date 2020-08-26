@@ -137,7 +137,6 @@ func NewController(
 	return controller
 }
 
-// minikube -> 1.16
 // prometheusRulesByIngress
 // - Accepts an prometheusRulesByIngress and returns all it's PrometheusRules
 func (c *Controller) prometheusRulesByIngress(ingress *extensionsv1beta1.Ingress) ([]*monitoringv1.PrometheusRule, error) {
