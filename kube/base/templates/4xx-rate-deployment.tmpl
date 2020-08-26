@@ -19,13 +19,13 @@ spec:
         (
           sum(
             rate(
-              http_requests_total{namespace="{{.Namespace}}",app="{{index .Selector "app"}}"{{if index .Selector "env"}},env="{{index .Selector "env"}}"{{end}},status=~"4.."}[30s]
+              http_requests_total{namespace="{{.Namespace}}",status=~"4.."{{.GeneratedLabels}}}[30s]
             )
           )
           /
           sum(
             rate(
-              http_requests_total{namespace="{{.Namespace}}",app="{{index .Selector "app"}}"{{if index .Selector "env"}},env="{{index .Selector "env"}}"{{end}}}[30s]
+              http_requests_total{namespace="{{.Namespace}}"{{.GeneratedLabels}}}[30s]
             )
           )
         ) > {{.Threshold}}

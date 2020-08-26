@@ -31,13 +31,13 @@ data:
             (
               sum(
                 rate(
-                  http_requests_total{namespace="{{.Namespace}}",app="{{index .Selector "app"}}"{{if index .Selector "env"}},env="{{index .Selector "env"}}"{{end}},status=~"4.."}[30s]
+                  http_requests_total{namespace="{{.Namespace}}",status=~"4.."{{.GeneratedLabels}}}[30s]
                 )
               )
               /
               sum(
                 rate(
-                  http_requests_total{namespace="{{.Namespace}}",app="{{index .Selector "app"}}"{{if index .Selector "env"}},env="{{index .Selector "env"}}"{{end}}}[30s]
+                  http_requests_total{namespace="{{.Namespace}}"{{.GeneratedLabels}}}[30s]
                 )
               )
             ) > {{.Threshold}}
@@ -69,13 +69,13 @@ data:
             (
               sum(
                 rate(
-                  http_requests_total{namespace="{{.Namespace}}",app="{{index .Selector "app"}}"{{if index .Selector "env"}},env="{{index .Selector "env"}}"{{end}},status=~"5.."}[30s]
+                  http_requests_total{namespace="{{.Namespace}}",status=~"5.."{{.GeneratedLabels}}}[30s]
                 )
               )
               /
               sum(
                 rate(
-                  http_requests_total{namespace="{{.Namespace}}",app="{{index .Selector "app"}}"{{if index .Selector "env"}},env="{{index .Selector "env"}}"{{end}}}[30s]
+                  http_requests_total{namespace="{{.Namespace}}"{{.GeneratedLabels}}}[30s]
                 )
               )
             ) > {{.Threshold}}
@@ -144,7 +144,7 @@ data:
               histogram_quantile(
                 0.95, sum(
                   rate(
-                    http_request_duration_seconds_bucket{namespace="{{.Namespace}}",app="{{index .Selector "app"}}"{{if index .Selector "env"}},env="{{index .Selector "env"}}"{{end}}}[5m]
+                    http_request_duration_seconds_bucket{namespace="{{.Namespace}}"{{.GeneratedLabels}}}[5m]
                   )
                 ) by (le)
               ) ) > {{.Threshold}}
@@ -177,7 +177,7 @@ data:
               histogram_quantile(
                 0.99, sum(
                   rate(
-                    http_request_duration_seconds_bucket{namespace="{{.Namespace}}",app="{{index .Selector "app"}}"{{if index .Selector "env"}},env="{{index .Selector "env"}}"{{end}}}[5m]
+                    http_request_duration_seconds_bucket{namespace="{{.Namespace}}"{{.GeneratedLabels}}}[5m]
                   )
                 ) by (le)
               ) ) > {{.Threshold}}
@@ -202,7 +202,7 @@ kind: ConfigMap
 metadata:
   labels:
     app: heimdall
-  name: heimdall-templates-4gm6cggt6d
+  name: heimdall-templates-kh4k2kdhk8
   namespace: monitoring
 ---
 apiVersion: apps/v1
@@ -252,5 +252,5 @@ spec:
       serviceAccountName: heimdall
       volumes:
       - configMap:
-          name: heimdall-templates-4gm6cggt6d
+          name: heimdall-templates-kh4k2kdhk8
         name: templates

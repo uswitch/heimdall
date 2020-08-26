@@ -3,9 +3,9 @@ package templates
 import (
 	"bytes"
 	"fmt"
-	"html/template"
 	"path/filepath"
 	"strings"
+	"text/template"
 
 	log "github.com/Sirupsen/logrus"
 
@@ -46,7 +46,7 @@ type templateParameterDeployment struct {
 	Name                string
 	Host                string
 	Value               string
-	Selector            map[string]string
+	GeneratedLabels     string
 	NSPrometheus        string
 	Deployment          *apps.Deployment
 }
@@ -153,16 +153,24 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 
 	logger := log.WithFields(log.Fields{"deployment": deploymentIdentifier})
 
-	params := &templateParameterDeployment{
-		Deployment:   deployment,
-		Identifier:   deploymentIdentifier,
-		Namespace:    deployment.Namespace,
-		Name:         deployment.Name,
-		Selector:     deployment.Spec.Selector.MatchLabels,
-		NSPrometheus: depNamespacePrometheus,
-	}
+	selectorMap := deployment.Spec.Selector.MatchLabels
 
-	logger.Debugf("\n ### Selector is: %+v", deployment.Spec.Selector.MatchLabels)
+	var builder strings.Builder
+	for key, value := range selectorMap {
+		fmt.Fprintf(&builder, ",%s=\"%s\"", key, value)
+	}
+	generatedLabels := builder.String()
+
+	logger.Debugf(" ### generatedLabels: %s", generatedLabels)
+
+	params := &templateParameterDeployment{
+		Deployment:      deployment,
+		Identifier:      deploymentIdentifier,
+		Namespace:       deployment.Namespace,
+		Name:            deployment.Name,
+		GeneratedLabels: generatedLabels,
+		NSPrometheus:    depNamespacePrometheus,
+	}
 
 	prometheusRules := map[string]*monitoringv1.PrometheusRule{}
 	annotations := params.Deployment.GetAnnotations()
