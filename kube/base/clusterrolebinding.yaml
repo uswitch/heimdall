@@ -6,8 +6,6 @@ metadata:
   labels:
     app: heimdall
   name: system:heimdall
-  annotations:
-    cloud.rvu.ontology/relation.v1.is_part_of: "/rvu/airship/observability/alerting"
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole

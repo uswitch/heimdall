@@ -240,7 +240,7 @@ func (c *Controller) processDeployment(namespace, name string) error {
 	deploymentNamespace, err := c.kubeclientset.CoreV1().Namespaces().Get(deployment.GetNamespace(), metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			runtime.HandleError(fmt.Errorf("We were unable to set the alert as the namespace '%s' doesn't have the prometheus label", namespace))
+			runtime.HandleError(fmt.Errorf("We were unable to set the alert as the namespace '%s' for deployment '%s' doesn't have the prometheus label", namespace, deployment))
 			return nil
 		}
 		return err

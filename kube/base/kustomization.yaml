@@ -6,10 +6,6 @@ namespace: monitoring
 commonLabels:
   app: heimdall
 
-commonAnnotations:
-  service.rvu.co.uk/criticality: low
-  service.rvu.co.uk/environment: staging
-
 resources:
 - deployment.yaml
 - serviceaccount.yaml

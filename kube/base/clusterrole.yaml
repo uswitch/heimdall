@@ -6,8 +6,6 @@ metadata:
   labels:
     app: heimdall
   name: system:heimdall
-  annotations:
-    cloud.rvu.ontology/relation.v1.is_part_of: "/rvu/airship/observability/alerting"
 rules:
 - apiGroups:
   - monitoring.coreos.com

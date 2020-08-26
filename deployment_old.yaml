@@ -1,0 +1,313 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: heimdall
+  namespace: kube-system
+  labels:
+    app: heimdall
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: heimdall
+  template:
+    metadata:
+      labels:
+        app: heimdall
+    spec:
+      serviceAccountName: heimdall
+      containers:
+      - name: heimdall
+        image: quay.io/uswitch/heimdall:v0.6.0
+        args:
+        - --json
+        resources:
+          requests:
+            cpu: 5m
+            memory: 20Mi
+          limits:
+            memory: 130Mi
+        volumeMounts:
+        - name: templates
+          mountPath: /templates
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - all
+      volumes:
+      - name: templates
+        configMap:
+          name: heimdall-templates
+      nodeSelector:
+        beta.kubernetes.io/os: linux
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app: heimdall
+  name: heimdall-templates
+  namespace: kube-system
+data:
+  5xx-rate.tmpl: |
+    ---
+    apiVersion: monitoring.coreos.com/v1
+    kind: PrometheusRule
+    metadata:
+      name: {{.Namespace}}-{{.Name}}-5xx-rate
+      namespace: ingress
+      labels:
+        role: alert-rules
+    spec:
+      groups:
+      - name: {{.Namespace}}-{{.Name}}-5xx-rate.rules
+        rules:
+        - alert: {{.Name}}-5xx-rate
+          annotations:
+            summary: |
+              {{.Identifier}}: 5xx proportion above {{.Threshold}} for 1m
+          expr: |
+            (
+              sum(
+                rate(
+                  nginx_ingress_controller_requests{exported_namespace="{{.Namespace}}",ingress="{{.Name}}",status=~"5.."}[30s]
+                )
+              )
+              /
+              sum(
+                rate(
+                  nginx_ingress_controller_requests{exported_namespace="{{.Namespace}}",ingress="{{.Name}}"}[30s]
+                )
+              )
+            ) > {{.Threshold}}
+          for: 1m
+          labels:
+            identifier: {{.Identifier}}
+            name: {{.Name}}-5xx-rate
+            namespace: {{.Namespace}}
+  5xx-rate-deployment.tmpl: |
+    ---
+    apiVersion: monitoring.coreos.com/v1
+    kind: PrometheusRule
+    metadata:
+      name: {{.Namespace}}-{{.Name}}-5xx-rate-deployment
+      namespace: {{.Namespace}}
+      labels:
+        prometheus: ingress
+        role: alert-rules
+    spec:
+      groups:
+      - name: {{.Namespace}}-{{.Name}}-5xx-rate-deployment.rules
+        rules:
+        - alert: {{.Name}}-5xx-rate-deployment
+          annotations:
+            summary: |
+              {{.Identifier}}: 5xx proportion above {{.Threshold}} for 1m
+          expr: |
+            (
+              sum(
+                rate(
+                  http_requests_total{namespace="{{.Namespace}}",app="{{.Selector}}",status=~"5.."}[30s]
+                )
+              )
+              /
+              sum(
+                rate(
+                  http_requests_total{namespace="{{.Namespace}}",app="{{.Selector}}"}[30s]
+                )
+              )
+            ) > {{.Threshold}}
+          for: 1m
+          labels:
+            identifier: {{.Identifier}}
+            name: {{.Name}}-5xx-rate-deployment
+            namespace: {{.Namespace}}
+            deployment: {{.Name}}
+  4xx-rate-deployment.tmpl: |
+    ---
+    apiVersion: monitoring.coreos.com/v1
+    kind: PrometheusRule
+    metadata:
+      name: {{.Namespace}}-{{.Name}}-4xx-rate-deployment
+      namespace: {{.Namespace}}
+      labels:
+        prometheus: ingress
+        role: alert-rules
+    spec:
+      groups:
+      - name: {{.Namespace}}-{{.Name}}-4xx-rate-deployment.rules
+        rules:
+        - alert: {{.Name}}-4xx-rate-deployment
+          annotations:
+            summary: |
+              {{.Identifier}}: 4xx proportion above {{.Threshold}} for 1m
+          expr: |
+            (
+              sum(
+                rate(
+                  http_requests_total{namespace="{{.Namespace}}",app="{{.Selector}}",status=~"4.."}[30s]
+                )
+              )
+              /
+              sum(
+                rate(
+                  http_requests_total{namespace="{{.Namespace}}",app="{{.Selector}}"}[30s]
+                )
+              )
+            ) > {{.Threshold}}
+          for: 1m
+          labels:
+            identifier: {{.Identifier}}
+            name: {{.Name}}-4xx-rate-deployment
+            namespace: {{.Namespace}}
+            deployment: {{.Name}}
+  p95-deployment.tmpl: |
+    ---
+    apiVersion: monitoring.coreos.com/v1
+    kind: PrometheusRule
+    metadata:
+      name: {{.Namespace}}-{{.Name}}-p95-deployment
+      namespace: {{.Namespace}}
+      labels:
+        role: alert-rules
+    spec:
+      groups:
+      - name: {{.Namespace}}-{{.Name}}-p95-deployment.rules
+        rules:
+        - alert: {{.Name}}-p95-deployment
+          annotations:
+            summary: |
+              {{.Identifier}}: P95 above {{.Threshold}} for 5m
+          expr: |
+            (
+              histogram_quantile(
+                0.95, sum(
+                  rate(
+                    http_request_duration_seconds_bucket{namespace="{{.Namespace}}",app="{{.Selector}}"}[5m]
+                  )
+                ) by (le)
+              ) ) > {{.Threshold}}
+          for: 1m
+          labels:
+            identifier: {{.Identifier}}
+            name: {{.Name}}-p95-deployment
+            namespace: {{.Namespace}}
+            deployment: {{.Name}}
+  p99-deployment.tmpl: |
+    ---
+    apiVersion: monitoring.coreos.com/v1
+    kind: PrometheusRule
+    metadata:
+      name: {{.Namespace}}-{{.Name}}-p99-deployment
+      namespace: {{.Namespace}}
+      labels:
+        role: alert-rules
+    spec:
+      groups:
+      - name: {{.Namespace}}-{{.Name}}-p99-deployment.rules
+        rules:
+        - alert: {{.Name}}-p99-deployment
+          annotations:
+            summary: |
+              {{.Identifier}}: P99 above {{.Threshold}} for 5m
+          expr: |
+            (
+              histogram_quantile(
+                0.99, sum(
+                  rate(
+                    http_request_duration_seconds_bucket{namespace="{{.Namespace}}",app="{{.Selector}}"}[5m]
+                  )
+                ) by (le)
+              ) ) > {{.Threshold}}
+          for: 1m
+          labels:
+            identifier: {{.Identifier}}
+            name: {{.Name}}-p99-deployment
+            namespace: {{.Namespace}}
+            deployment: {{.Name}}
+  replicas-availability-deployment.tmpl: |
+    ---
+    apiVersion: monitoring.coreos.com/v1
+    kind: PrometheusRule
+    metadata:
+      name: {{.Namespace}}-{{.Name}}-replicas-availability-deployment
+      namespace: {{.Namespace}}
+      labels:
+        prometheus: kube-system
+        role: alert-rules
+    spec:
+      groups:
+      - name: {{.Namespace}}-{{.Name}}-replicas-availability-deployment.rules
+        rules:
+        - alert: {{.Name}}-replicas-availability-deployment
+          annotations:
+            summary: |
+              {{.Identifier}}: Availability proportion over the requested amount of replicas {{.Threshold}} for 5m
+          expr: |
+            kube_deployment_status_replicas_available{namespace="{{.Namespace}}", deployment="{{.Name}}"} 
+            /  
+            kube_deployment_spec_replicas{namespace="{{.Namespace}}", deployment="{{.Name}}"} > {{.Threshold}}
+          for: 5m
+          labels:
+            identifier: {{.Identifier}}
+            name: {{.Name}}-replicas-availability-deployment
+            namespace: {{.Namespace}}
+            deployment: {{.Name}}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  metadata:
+  labels:
+    app: heimdall
+  name: system:heimdall
+rules:
+- apiGroups:
+  - monitoring.coreos.com
+  resources:
+  - prometheusrules
+  verbs:
+  - list
+  - watch
+  - create
+  - update
+  - delete
+- apiGroups:
+  - extensions
+  resources:
+  - ingresses
+  verbs:
+  - list
+  - watch
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  metadata:
+  labels:
+    app: heimdall
+  name: heimdall
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  metadata:
+  labels:
+    app: heimdall
+  name: system:heimdall
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:heimdall
+subjects:
+- kind: ServiceAccount
+  name: heimdall
+  namespace: kube-system

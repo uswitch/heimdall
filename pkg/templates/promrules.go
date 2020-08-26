@@ -46,7 +46,7 @@ type templateParameterDeployment struct {
 	Name                string
 	Host                string
 	Value               string
-	Selector            string
+	Selector            map[string]string
 	NSPrometheus        string
 	Deployment          *apps.Deployment
 }
@@ -151,14 +151,18 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1b
 func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.Deployment, depNamespacePrometheus string) ([]*monitoringv1.PrometheusRule, error) {
 	deploymentIdentifier := fmt.Sprintf("%s.%s", deployment.Namespace, deployment.Name)
 
+	logger := log.WithFields(log.Fields{"deployment": deploymentIdentifier})
+
 	params := &templateParameterDeployment{
 		Deployment:   deployment,
 		Identifier:   deploymentIdentifier,
 		Namespace:    deployment.Namespace,
 		Name:         deployment.Name,
-		Selector:     deployment.GetLabels()["app"],
+		Selector:     deployment.Spec.Selector.MatchLabels,
 		NSPrometheus: depNamespacePrometheus,
 	}
+
+	logger.Debugf("\n ### Selector is: %+v", deployment.Spec.Selector.MatchLabels)
 
 	prometheusRules := map[string]*monitoringv1.PrometheusRule{}
 	annotations := params.Deployment.GetAnnotations()
@@ -169,24 +173,24 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 		}
 
 		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
-		log.Printf("\n *** templateName is: %s", templateName)
+		logger.Printf("\n *** templateName is: %s", templateName)
 		template, ok := a.templates[templateName]
 		if !ok {
-			log.Warnf("[deployment][%s] no template for \"%s\"", deploymentIdentifier, templateName)
+			logger.Warnf("[deployment][%s] no template for \"%s\"", deploymentIdentifier, templateName)
 			continue
 		}
 
 		params.Threshold = v
 		var result bytes.Buffer
 		if err := template.Execute(&result, params); err != nil {
-			log.Warnf("[deployment][%s] error executing template : %s", deploymentIdentifier, err)
+			logger.Warnf("[deployment][%s] error executing template : %s", deploymentIdentifier, err)
 			continue
 		}
 
 		promrule := &monitoringv1.PrometheusRule{}
 
 		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(result.Bytes()), 1024).Decode(promrule); err != nil {
-			log.Warnf("[deployment][%s] error parsing YAML: %s", deploymentIdentifier, err)
+			logger.Warnf("[deployment][%s] error parsing YAML: %s", deploymentIdentifier, err)
 			continue
 		}
 

@@ -20,7 +20,7 @@ spec:
           histogram_quantile(
             0.95, sum(
               rate(
-                http_request_duration_seconds_bucket{namespace="{{.Namespace}}",app="{{.Selector}}"}[5m]
+                http_request_duration_seconds_bucket{namespace="{{.Namespace}}",app="{{index .Selector "app"}}"{{if index .Selector "env"}},env="{{index .Selector "env"}}"{{end}}}[5m]
               )
             ) by (le)
           ) ) > {{.Threshold}}
