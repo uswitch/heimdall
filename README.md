@@ -16,43 +16,34 @@ template can be found [here](./kube/base/templates/). By default,
 Heimdall will look for a folder called `templates` to find these in. You can
 override this with the `--templates` flag.
 
-## Ingress Annotations
+## Example Annotations RVU uses
 
-Your Ingress must have annotations in the form of:
+We do have some custom Prometheus Rules we use, which give you an idea on what alerts we create in an automated fashion.
+These can be deleted, modified and new ones can be created by putting the templates in [this folder](./kube/base/templates/).
 
+Your Ingress / Deployment must have annotations in the form of:
 `com.uswitch.heimdall/<prometheus-rule-name>: <threshold>`
 
 For example:
 
 `com.uswitch.heimdall/5xx-rate: "0.001"`
 
-This will create a PrometheusRule based on the `5xx-rate.tmpl` template with a
+This will create a PrometheusRule for an Ingress, based on the `5xx-rate.tmpl` template with a
 threshold of `0.001`.
 
-## Deployment Annotations
+Available annotations for Ingress:
+- `com.uswitch.heimdall/5xx-rate` - alerts if the 5XX rate goes above the given threshold for at least 1 minute
 
-Your Deployment must have annotations in the form of:
-
-`com.uswitch.heimdall/<prometheus-rule-name>: <threshold>`
-
-For example:
-
-`com.uswitch.heimdall/5xx-rate-deployment: "0.001"`
-
-This will create a PrometheusRule based on the `5xx-rate-deployment.tmpl` template with a
-threshold of `0.001`.
-
-Available annotations:
-
-`com.uswitch.heimdall/4xx-rate-deployment` - alerts if the 4XX rate goes above the given threshold for at least 1 minute
-`com.uswitch.heimdall/5xx-rate-deployment` - alerts if the 5XX rate goes above the given threshold for at least 1 minute
-`com.uswitch.heimdall/p95-deployment` - alerts if the P95 goes above the given ms for at least 5 minutes
-`com.uswitch.heimdall/p99-deployment` - alerts if the P95 goes above the given ms for at least 5 minutes
-`com.uswitch.heimdall/replicas-availability-deployment`- alerts if the given % of replicas are not running for 5 minutes
+Available annotations for Deployment:
+- `com.uswitch.heimdall/4xx-rate-deployment` - alerts if the 4XX rate goes above the given threshold for at least 1 minute
+- `com.uswitch.heimdall/5xx-rate-deployment` - alerts if the 5XX rate goes above the given threshold for at least 1 minute
+- `com.uswitch.heimdall/p95-deployment` - alerts if the P95 goes above the given ms for at least 5 minutes
+- `com.uswitch.heimdall/p99-deployment` - alerts if the P95 goes above the given ms for at least 5 minutes
+- `com.uswitch.heimdall/replicas-availability-deployment`- alerts if the given % of replicas are not running for 5 minutes
 
 ## Running Heimdall locally
 
-Once the kubernetes context is set to a local cluster, skaffold + kustomize can help deploying the local Heimdall version
+Once the kubernetes context is set to a local cluster, [skaffold](https://skaffold.dev/) + [kustomize](https://github.com/kubernetes-sigs/kustomize) can help deploying the local Heimdall version
 to the cluster. For that you might want to change the Container registry URL from quay to your own container registry.
 References are found in `/kube/base/deployment.yaml` & `/kube/overlays/skaffold/kustomization.yaml` & `skaffold.yaml`
 
