@@ -12,7 +12,7 @@ have a consistent set of PrometheusRules.
 
 Heimdall needs templates for the PrometheusRules it will create. These are
 standard [go template files](https://golang.org/pkg/text/template/). An example
-template can be found [here](./example-prometheusrule-templates/). By default,
+template can be found [here](./kube/base/templates/). By default,
 Heimdall will look for a folder called `templates` to find these in. You can
 override this with the `--templates` flag.
 
@@ -28,6 +28,37 @@ For example:
 
 This will create a PrometheusRule based on the `5xx-rate.tmpl` template with a
 threshold of `0.001`.
+
+## Deployment Annotations
+
+Your Deployment must have annotations in the form of:
+
+`com.uswitch.heimdall/<prometheus-rule-name>: <threshold>`
+
+For example:
+
+`com.uswitch.heimdall/5xx-rate-deployment: "0.001"`
+
+This will create a PrometheusRule based on the `5xx-rate-deployment.tmpl` template with a
+threshold of `0.001`.
+
+Available annotations:
+
+`com.uswitch.heimdall/4xx-rate-deployment` - alerts if the 4XX rate goes above the given threshold for at least 1 minute
+`com.uswitch.heimdall/5xx-rate-deployment` - alerts if the 5XX rate goes above the given threshold for at least 1 minute
+`com.uswitch.heimdall/p95-deployment` - alerts if the P95 goes above the given ms for at least 5 minutes
+`com.uswitch.heimdall/p99-deployment` - alerts if the P95 goes above the given ms for at least 5 minutes
+`com.uswitch.heimdall/replicas-availability-deployment`- alerts if the given % of replicas are not running for 5 minutes
+
+## Running Heimdall locally
+
+Once the kubernetes context is set to a local cluster, skaffold + kustomize can help deploying the local Heimdall version
+to the cluster. For that you might want to change the Container registry URL from quay to your own container registry.
+References are found in `/kube/base/deployment.yaml` & `/kube/overlays/skaffold/kustomization.yaml` & `skaffold.yaml`
+
+The command to build and deploy the application is `skaffold dev`
+
+If you'd like to generate a new `deployment.yaml` file for deploying purposes, you can run `kustomize build kube/base | tee -a deployment.yaml`.
 
 ## Requirements
 
