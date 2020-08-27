@@ -42,7 +42,7 @@ func main() {
 	kingpin.Flag("debug", "Debug mode").BoolVar(&opts.debug)
 	kingpin.Flag("json", "Output log data in JSON format").Default("false").BoolVar(&opts.jsonFormat)
 	kingpin.Flag("templates", "Directory for the templates").Default("templates").StringVar(&opts.templates)
-	kingpin.Flag("sync-interval", "Synchronize list of Ingress resources this frequently").Default("1m").DurationVar(&opts.syncInterval)
+	kingpin.Flag("sync-interval", "Synchronize list of Ingress / Deployments resources this frequently").Default("1m").DurationVar(&opts.syncInterval)
 	kingpin.Parse()
 
 	// Initialize client-go's klog to pick-up default value of logtostderr

@@ -1,0 +1,32 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{.Namespace}}-{{.Name}}-p95-deployment
+  namespace: {{.Namespace}}
+  labels:
+    prometheus: {{.NSPrometheus}}
+    role: alert-rules
+spec:
+  groups:
+  - name: {{.Namespace}}-{{.Name}}-p95-deployment.rules
+    rules:
+    - alert: {{.Name}}-p95-deployment
+      annotations:
+        summary: |
+          {{.Identifier}}: P95 above {{.Threshold}} for 5m
+      expr: |
+        (
+          histogram_quantile(
+            0.95, sum(
+              rate(
+                http_request_duration_seconds_bucket{namespace="{{.Namespace}}"{{.GeneratedLabels}}}[5m]
+              )
+            ) by (le)
+          ) ) > {{.Threshold}}
+      for: 1m
+      labels:
+        identifier: {{.Identifier}}
+        name: {{.Name}}-p95-deployment
+        namespace: {{.Namespace}}
+        deployment: {{.Name}}

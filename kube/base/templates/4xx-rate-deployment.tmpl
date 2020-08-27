@@ -1,0 +1,37 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{.Namespace}}-{{.Name}}-4xx-rate-deployment
+  namespace: {{.Namespace}}
+  labels:
+    prometheus: {{.NSPrometheus}}
+    role: alert-rules
+spec:
+  groups:
+  - name: {{.Namespace}}-{{.Name}}-4xx-rate-deployment.rules
+    rules:
+    - alert: {{.Name}}-4xx-rate-deployment
+      annotations:
+        summary: |
+          {{.Identifier}}: 4xx proportion above {{.Threshold}} for 1m
+      expr: |
+        (
+          sum(
+            rate(
+              http_requests_total{namespace="{{.Namespace}}",status=~"4.."{{.GeneratedLabels}}}[30s]
+            )
+          )
+          /
+          sum(
+            rate(
+              http_requests_total{namespace="{{.Namespace}}"{{.GeneratedLabels}}}[30s]
+            )
+          )
+        ) > {{.Threshold}}
+      for: 1m
+      labels:
+        identifier: {{.Identifier}}
+        name: {{.Name}}-4xx-rate-deployment
+        namespace: {{.Namespace}}
+        deployment: {{.Name}}

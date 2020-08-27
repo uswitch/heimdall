@@ -1,0 +1,35 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{.Namespace}}-{{.Name}}-5xx-rate
+  namespace: ingress
+  labels:
+    role: alert-rules
+spec:
+  groups:
+  - name: {{.Namespace}}-{{.Name}}-5xx-rate.rules
+    rules:
+    - alert: {{.Name}}-5xx-rate
+      annotations:
+        summary: |
+          {{.Identifier}}: 5xx proportion above {{.Threshold}} for 1m
+      expr: |
+        (
+          sum(
+            rate(
+              nginx_ingress_controller_requests{exported_namespace="{{.Namespace}}",ingress="{{.Name}}",status=~"5.."}[30s]
+            )
+          )
+          /
+          sum(
+            rate(
+              nginx_ingress_controller_requests{exported_namespace="{{.Namespace}}",ingress="{{.Name}}"}[30s]
+            )
+          )
+        ) > {{.Threshold}}
+      for: 1m
+      labels:
+        identifier: {{.Identifier}}
+        name: {{.Name}}-5xx-rate
+        namespace: {{.Namespace}}

@@ -1,0 +1,50 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: heimdall
+  namespace: monitoring
+  labels:
+    app: heimdall
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: heimdall
+  template:
+    metadata:
+      labels:
+        app: heimdall
+    spec:
+      serviceAccountName: heimdall
+      containers:
+      - name: heimdall
+        image: quay.io/uswitch/heimdall
+        args:
+        - --json
+        env:
+        - name: GODEBUG
+          value: madvdontneed=1
+        resources:
+          requests:
+            cpu: 5m
+            memory: 20Mi
+          limits:
+            memory: 130Mi
+        volumeMounts:
+        - name: templates
+          mountPath: "/templates"
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - all
+      volumes:
+      - name: templates
+        configMap:
+          name: heimdall-templates
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000

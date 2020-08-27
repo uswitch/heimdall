@@ -1,0 +1,16 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  metadata: 
+  labels:
+    app: heimdall
+  name: system:heimdall
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:heimdall
+subjects:
+- kind: ServiceAccount
+  name: heimdall
+  namespace: monitoring
