@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 
 	apps "k8s.io/api/apps/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"

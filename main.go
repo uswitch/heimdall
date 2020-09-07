@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
