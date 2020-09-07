@@ -11,7 +11,7 @@ import (
 )
 
 func TestIngressAnnotations(t *testing.T) {
-	template, _ := NewPrometheusRuleTemplateManager("../../kube/base/templates")
+	template, _ := NewPrometheusRuleTemplateManager("../../kube/config/templates")
 	ingress := &extensionsv1beta1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "testicuffs",
