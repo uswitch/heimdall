@@ -1,0 +1,5 @@
+configMapGenerator:
+- name: heimdall-templates
+  files:
+  - templates/5xx-rate.tmpl
+  - templates/replicas-availability-deployment.tmpl
