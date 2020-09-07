@@ -35,11 +35,7 @@ Available annotations for Ingress:
 - `com.uswitch.heimdall/5xx-rate` - alerts if the 5XX rate goes above the given threshold for at least 1 minute
 
 Available annotations for Deployment:
-- `com.uswitch.heimdall/4xx-rate-deployment` - alerts if the 4XX rate goes above the given threshold for at least 1 minute
-- `com.uswitch.heimdall/5xx-rate-deployment` - alerts if the 5XX rate goes above the given threshold for at least 1 minute
-- `com.uswitch.heimdall/p95-deployment` - alerts if the P95 goes above the given ms for at least 5 minutes
-- `com.uswitch.heimdall/p99-deployment` - alerts if the P95 goes above the given ms for at least 5 minutes
-- `com.uswitch.heimdall/replicas-availability-deployment`- alerts if the given % of replicas are not running for 5 minutes
+- `com.uswitch.heimdall/replicas-availability-deployment`- alerts if the given part of the total replicas are not running for 5 minutes. (0.1 would alert if 1 pod goes unavailable out of a total of 10 pods)
 
 ## Running Heimdall locally
 

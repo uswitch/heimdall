@@ -8,6 +8,7 @@ commonLabels:
 
 bases:
 - ../../base
+- ../../config
 
 images:
 - name: quay.io/uswitch/heimdall

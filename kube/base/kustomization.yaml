@@ -9,13 +9,3 @@ commonLabels:
 resources:
 - deployment.yaml
 - serviceaccount.yaml
-
-configMapGenerator:
-- name: heimdall-templates
-  files: 
-  - templates/p99-deployment.tmpl
-  - templates/p95-deployment.tmpl
-  - templates/4xx-rate-deployment.tmpl
-  - templates/5xx-rate-deployment.tmpl
-  - templates/5xx-rate.tmpl
-  - templates/replicas-availability-deployment.tmpl
