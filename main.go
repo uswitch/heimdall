@@ -3,9 +3,9 @@ package main
 import (
 	"time"
 
-	log "github.com/sirupsen/logrus"
 	kingpin "gopkg.in/alecthomas/kingpin.v2"
 
+	log "github.com/uswitch/heimdall/pkg/log"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -49,36 +49,31 @@ func main() {
 	klog.InitFlags(nil)
 
 	if opts.debug {
-		log.SetLevel(log.DebugLevel)
-		log.Debugln("Debug logging enabled")
+		log.Setup(log.DEBUG_LEVEL)
 	} else {
-		log.SetLevel(log.InfoLevel)
-	}
-
-	if opts.jsonFormat {
-		log.SetFormatter(&log.JSONFormatter{})
+		log.Setup(log.INFO_LEVEL)
 	}
 
 	stopCh := make(chan struct{}, 1)
 
 	config, err := createClientConfig(opts)
 	if err != nil {
-		log.Fatalf("error creating client config: %s", err)
+		log.Sugar.Fatalf("error creating client config: %s", err)
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(config)
 	if err != nil {
-		log.Fatalf("Error building kubernetes clientset: %s", err.Error())
+		log.Sugar.Fatalf("Error building kubernetes clientset: %s", err.Error())
 	}
 
 	promClient, err := promclientset.NewForConfig(config)
 	if err != nil {
-		log.Fatalf("Error building prometheus operator clientset: %s", err.Error())
+		log.Sugar.Fatalf("ErError building prometheus operator clientset: %s", err.Error())
 	}
 
 	templateManager, err := templates.NewPrometheusRuleTemplateManager(opts.templates)
 	if err != nil {
-		log.Fatalf("Error creating template manager: %s", err.Error())
+		log.Sugar.Fatalf("Error creating template manager: %s", err.Error())
 	}
 
 	namespace := opts.namespace
@@ -97,6 +92,6 @@ func main() {
 	go promInformerFactory.Start(stopCh)
 
 	if err = controller.Run(stopCh); err != nil {
-		log.Fatalf("Error running controller: %s", err.Error())
+		log.Sugar.Fatalf("Error running controller: %s", err.Error())
 	}
 }

@@ -4,8 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
+	log "github.com/uswitch/heimdall/pkg/log"
 	apps "k8s.io/api/apps/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -247,7 +246,7 @@ func (c *Controller) processDeployment(namespace, name string) error {
 
 	deploymentNamespacePrometheus := deploymentNamespace.GetAnnotations()["prometheus"]
 
-	log.Printf("*********   Chosen prometheus is going to be: %s", deploymentNamespacePrometheus)
+	log.Sugar.Debugf("*********   Chosen prometheus is going to be: %s", deploymentNamespacePrometheus)
 	newPrometheusRules, err := c.templateManager.CreateFromDeployment(deployment, deploymentNamespacePrometheus)
 	if err != nil {
 		return err
@@ -331,7 +330,7 @@ func runner(workqueue workqueue.RateLimitingInterface, processFn func(string, st
 				// Finally, no error has occurred; we Forget this item so it does not
 				// get queued again until another change happens.
 				workqueue.Forget(obj)
-				log.Infof("Successfully synced '%s'", key)
+				log.Sugar.Debugf("Successfully synced '%s'", key)
 				return nil
 			}(obj)
 
@@ -349,10 +348,10 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	defer c.promruleWorkqueue.ShutDown()
 
 	// Start the informer factories to begin populating the informer caches
-	log.Info("Starting Heimdall")
+	log.Sugar.Info("Starting Heimdall")
 
 	// Wait for the caches to be synced before starting workers
-	log.Info("Waiting for informer caches to sync")
+	log.Sugar.Info("Waiting for informer caches to sync")
 	if ok := cache.WaitForCacheSync(stopCh, c.ingressSynced, c.promruleSynced); !ok {
 		return fmt.Errorf("failed to wait for caches to sync")
 	}
@@ -360,13 +359,13 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	ingressRunner := runner(c.ingressWorkqueue, c.processIngress)
 	deploymentRunner := runner(c.deploymentWorkqueue, c.processDeployment)
 
-	log.Info("Starting workers")
+	log.Sugar.Info("Starting workers")
 	go wait.Until(ingressRunner, time.Second, stopCh)
 	go wait.Until(deploymentRunner, time.Second, stopCh)
 
-	log.Info("Started workers")
+	log.Sugar.Info("Started workers")
 	<-stopCh
-	log.Info("Shutting down workers")
+	log.Sugar.Info("Shutting down workers")
 
 	return nil
 }

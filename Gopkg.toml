@@ -1,8 +1,4 @@
 [[constraint]]
-  name = "github.com/sirupsen/logrus"
-  version = "1.0.5"
-
-[[constraint]]
   name = "gopkg.in/alecthomas/kingpin.v2"
   version = "2.2.6"
 

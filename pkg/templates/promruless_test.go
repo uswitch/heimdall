@@ -3,6 +3,7 @@ package templates
 import (
 	"testing"
 
+	log "github.com/uswitch/heimdall/pkg/log"
 	"gotest.tools/assert"
 	is "gotest.tools/assert/cmp"
 
@@ -11,6 +12,7 @@ import (
 )
 
 func TestIngressAnnotations(t *testing.T) {
+	log.Setup(log.DEBUG_LEVEL)
 	template, _ := NewPrometheusRuleTemplateManager("../../kube/config/templates")
 	ingress := &extensionsv1beta1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{

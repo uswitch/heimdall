@@ -7,7 +7,7 @@ import (
 	"strings"
 	"text/template"
 
-	log "github.com/sirupsen/logrus"
+	log "github.com/uswitch/heimdall/pkg/log"
 
 	apps "k8s.io/api/apps/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
@@ -83,7 +83,7 @@ func NewPrometheusRuleTemplateManager(directory string) (*PrometheusRuleTemplate
 		templates[strings.TrimSuffix(filepath.Base(t), ".tmpl")] = tmpl
 	}
 
-	log.Printf("%+v", templates)
+	log.Sugar.Debugf("%+v", templates)
 	if len(templates) == 0 {
 		return nil, fmt.Errorf("no templates defined")
 	}
@@ -114,21 +114,21 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1b
 		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
 		template, ok := a.templates[templateName]
 		if !ok {
-			log.Warnf("[ingress][%s] no template for \"%s\"", ingressIdentifier, templateName)
+			log.Sugar.Warnf("[ingress][%s] no template for \"%s\"", ingressIdentifier, templateName)
 			continue
 		}
 
 		params.Threshold = v
 		var result bytes.Buffer
 		if err := template.Execute(&result, params); err != nil {
-			log.Warnf("[ingress][%s] error executing template : %s", ingressIdentifier, err)
+			log.Sugar.Warnf("[ingress][%s] error executing template : %s", ingressIdentifier, err)
 			continue
 		}
 
 		promrule := &monitoringv1.PrometheusRule{}
 
 		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(result.Bytes()), 1024).Decode(promrule); err != nil {
-			log.Warnf("[ingress][%s] error parsing YAML: %s", ingressIdentifier, err)
+			log.Sugar.Warnf("[ingress][%s] error parsing YAML: %s", ingressIdentifier, err)
 			continue
 		}
 
@@ -151,8 +151,6 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1b
 func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.Deployment, depNamespacePrometheus string) ([]*monitoringv1.PrometheusRule, error) {
 	deploymentIdentifier := fmt.Sprintf("%s.%s", deployment.Namespace, deployment.Name)
 
-	logger := log.WithFields(log.Fields{"deployment": deploymentIdentifier})
-
 	selectorMap := deployment.Spec.Selector.MatchLabels
 
 	var builder strings.Builder
@@ -161,7 +159,7 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 	}
 	generatedLabels := builder.String()
 
-	logger.Debugf(" ### generatedLabels: %s", generatedLabels)
+	log.Sugar.Debugf(" ### generatedLabels for deployment %s: %s", deploymentIdentifier, generatedLabels)
 
 	params := &templateParameterDeployment{
 		Deployment:      deployment,
@@ -181,24 +179,24 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 		}
 
 		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
-		logger.Printf("\n *** templateName is: %s", templateName)
+		log.Sugar.Infof("\n *** templateName is: %s", templateName)
 		template, ok := a.templates[templateName]
 		if !ok {
-			logger.Warnf("[deployment][%s] no template for \"%s\"", deploymentIdentifier, templateName)
+			log.Sugar.Warnf("[deployment][%s] no template for \"%s\"", deploymentIdentifier, templateName)
 			continue
 		}
 
 		params.Threshold = v
 		var result bytes.Buffer
 		if err := template.Execute(&result, params); err != nil {
-			logger.Warnf("[deployment][%s] error executing template : %s", deploymentIdentifier, err)
+			log.Sugar.Warnf("[deployment][%s] error executing template : %s", deploymentIdentifier, err)
 			continue
 		}
 
 		promrule := &monitoringv1.PrometheusRule{}
 
 		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(result.Bytes()), 1024).Decode(promrule); err != nil {
-			logger.Warnf("[deployment][%s] error parsing YAML: %s", deploymentIdentifier, err)
+			log.Sugar.Warnf("[deployment][%s] error parsing YAML: %s", deploymentIdentifier, err)
 			continue
 		}
 
