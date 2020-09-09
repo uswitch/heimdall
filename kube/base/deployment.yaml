@@ -20,6 +20,9 @@ spec:
       containers:
       - name: heimdall
         image: quay.io/uswitch/heimdall
+        envFrom:
+        - secretRef:
+            name: heimdall-sentry-secret
         args:
         - --json
         env:

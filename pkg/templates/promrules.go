@@ -8,6 +8,7 @@ import (
 	"text/template"
 
 	log "github.com/uswitch/heimdall/pkg/log"
+	"github.com/uswitch/heimdall/pkg/sentryclient"
 
 	apps "k8s.io/api/apps/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
@@ -71,12 +72,14 @@ func NewPrometheusRuleTemplateManager(directory string) (*PrometheusRuleTemplate
 	templates := map[string]*template.Template{}
 	templateFiles, err := filepath.Glob(directory + "/*.tmpl")
 	if err != nil {
+		sentryclient.SentryErr(err)
 		return nil, err
 	}
 
 	for _, t := range templateFiles {
 		tmpl, err := template.ParseFiles(t)
 		if err != nil {
+			sentryclient.SentryErr(err)
 			return nil, err
 		}
 
@@ -114,21 +117,27 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1b
 		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
 		template, ok := a.templates[templateName]
 		if !ok {
-			log.Sugar.Warnf("[ingress][%s] no template for \"%s\"", ingressIdentifier, templateName)
+			warnMessage := fmt.Sprintf("[ingress][%s] no template for \"%s\"", ingressIdentifier, templateName)
+			log.Sugar.Warnf(warnMessage)
+			sentryclient.SentryMessage(warnMessage)
 			continue
 		}
 
 		params.Threshold = v
 		var result bytes.Buffer
 		if err := template.Execute(&result, params); err != nil {
-			log.Sugar.Warnf("[ingress][%s] error executing template : %s", ingressIdentifier, err)
+			warnMessage := fmt.Sprintf("[ingress][%s] error executing template : %s", ingressIdentifier, err)
+			log.Sugar.Warnf(warnMessage)
+			sentryclient.SentryMessage(warnMessage)
 			continue
 		}
 
 		promrule := &monitoringv1.PrometheusRule{}
 
 		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(result.Bytes()), 1024).Decode(promrule); err != nil {
-			log.Sugar.Warnf("[ingress][%s] error parsing YAML: %s", ingressIdentifier, err)
+			warnMessage := fmt.Sprintf("[ingress][%s] error parsing YAML: %s", ingressIdentifier, err)
+			log.Sugar.Warnf(warnMessage)
+			sentryclient.SentryMessage(warnMessage)
 			continue
 		}
 
@@ -182,21 +191,27 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 		log.Sugar.Infof("\n *** templateName is: %s", templateName)
 		template, ok := a.templates[templateName]
 		if !ok {
-			log.Sugar.Warnf("[deployment][%s] no template for \"%s\"", deploymentIdentifier, templateName)
+			warnMessage := fmt.Sprintf("[deployment][%s] no template for \"%s\"", deploymentIdentifier, templateName)
+			log.Sugar.Warnf(warnMessage)
+			sentryclient.SentryMessage(warnMessage)
 			continue
 		}
 
 		params.Threshold = v
 		var result bytes.Buffer
 		if err := template.Execute(&result, params); err != nil {
-			log.Sugar.Warnf("[deployment][%s] error executing template : %s", deploymentIdentifier, err)
+			warnMessage := fmt.Sprintf("[deployment][%s] error executing template : %s", deploymentIdentifier, err)
+			log.Sugar.Warnf(warnMessage)
+			sentryclient.SentryMessage(warnMessage)
 			continue
 		}
 
 		promrule := &monitoringv1.PrometheusRule{}
 
 		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(result.Bytes()), 1024).Decode(promrule); err != nil {
-			log.Sugar.Warnf("[deployment][%s] error parsing YAML: %s", deploymentIdentifier, err)
+			warnMessage := fmt.Sprintf("[deployment][%s] error parsing YAML: %s", deploymentIdentifier, err)
+			log.Sugar.Warnf(warnMessage)
+			sentryclient.SentryMessage(warnMessage)
 			continue
 		}
 
