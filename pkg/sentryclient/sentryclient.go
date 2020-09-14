@@ -37,12 +37,15 @@ func SetupSentry() {
 		if err != nil {
 			log.Sugar.Fatalf("sentry.Init: %s", err)
 		}
-		// Flush buffered events before the program terminates.
-		defer sentry.Flush(2 * time.Second)
 
 		log.Sugar.Info("Sentry has been initialised!")
 		sentryActive = true
 	} else {
 		log.Sugar.Info("Secret for Sentry is not present, so we are running without Sentry!")
 	}
+}
+
+// FlushSentry flushes buffered events
+func FlushSentry() {
+	defer sentry.Flush(2 * time.Second)
 }

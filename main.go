@@ -53,6 +53,7 @@ func main() {
 	}
 
 	sentryclient.SetupSentry()
+	defer sentryclient.FlushSentry()
 
 	// Initialize client-go's klog to pick-up default value of logtostderr
 	klog.InitFlags(nil)
