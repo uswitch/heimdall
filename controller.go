@@ -254,7 +254,7 @@ func (c *Controller) processDeployment(namespace, name string) error {
 
 	deploymentNamespacePrometheus := deploymentNamespace.GetAnnotations()["prometheus"]
 
-	log.Sugar.Debugf("*********   Chosen prometheus is going to be: %s", deploymentNamespacePrometheus)
+	log.Sugar.Debugw("Prometheus instance for alert", "deployment", name, "namespace", namespace, "prometheus", deploymentNamespacePrometheus)
 	newPrometheusRules, err := c.templateManager.CreateFromDeployment(deployment, deploymentNamespacePrometheus)
 	if err != nil {
 		sentryclient.SentryErr(err)
@@ -342,7 +342,7 @@ func runner(workqueue workqueue.RateLimitingInterface, processFn func(string, st
 				// Finally, no error has occurred; we Forget this item so it does not
 				// get queued again until another change happens.
 				workqueue.Forget(obj)
-				log.Sugar.Debugf("Successfully synced '%s'", key)
+				log.Sugar.Debugw("Successfully synced", "key", key)
 				return nil
 			}(obj)
 
