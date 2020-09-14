@@ -213,7 +213,20 @@ func (c *Controller) processIngress(namespace, name string) error {
 		return err
 	}
 
-	newPrometheusRules, err := c.templateManager.CreateFromIngress(ingress)
+	// We have to look up the namespace to decide which Prometheus instance the Deployment should report to
+	ingressNamespace, err := c.kubeclientset.CoreV1().Namespaces().Get(ingress.GetNamespace(), metav1.GetOptions{})
+	if err != nil {
+		sentryclient.SentryErr(err)
+		if errors.IsNotFound(err) {
+			runtime.HandleError(fmt.Errorf("We were unable to set the alert as the namespace '%s' for ingress '%s' doesn't have the prometheus label", namespace, ingress))
+			return nil
+		}
+		return err
+	}
+
+	ingressNamespacePrometheus := ingressNamespace.GetAnnotations()["prometheus"]
+
+	newPrometheusRules, err := c.templateManager.CreateFromIngress(ingress, ingressNamespacePrometheus)
 	if err != nil {
 		sentryclient.SentryErr(err)
 		return err

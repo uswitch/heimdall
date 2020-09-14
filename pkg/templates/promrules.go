@@ -30,13 +30,14 @@ type PrometheusRuleTemplateManager struct {
 // templateParameter
 // - struct passed to each promrule template
 type templateParameterIngress struct {
-	Identifier string
-	Threshold  string
-	Namespace  string
-	Name       string
-	Host       string
-	Value      string
-	Ingress    *extensionsv1beta1.Ingress
+	Identifier   string
+	Threshold    string
+	Namespace    string
+	Name         string
+	Host         string
+	Value        string
+	NSPrometheus string
+	Ingress      *extensionsv1beta1.Ingress
 }
 
 type templateParameterDeployment struct {
@@ -96,14 +97,15 @@ func NewPrometheusRuleTemplateManager(directory string) (*PrometheusRuleTemplate
 
 // CreateFromIngress
 // - Creates all the promRules for a given Ingress
-func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1beta1.Ingress) ([]*monitoringv1.PrometheusRule, error) {
+func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1beta1.Ingress, ingressNamespacePrometheus string) ([]*monitoringv1.PrometheusRule, error) {
 	ingressIdentifier := fmt.Sprintf("%s.%s", ingress.Namespace, ingress.Name)
 
 	params := &templateParameterIngress{
-		Ingress:    ingress,
-		Identifier: ingressIdentifier,
-		Namespace:  ingress.Namespace,
-		Name:       ingress.Name,
+		Ingress:      ingress,
+		Identifier:   ingressIdentifier,
+		Namespace:    ingress.Namespace,
+		Name:         ingress.Name,
+		NSPrometheus: ingressNamespacePrometheus,
 	}
 
 	prometheusRules := map[string]*monitoringv1.PrometheusRule{}
