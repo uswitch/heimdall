@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
-
+	log "github.com/uswitch/heimdall/pkg/log"
+	"github.com/uswitch/heimdall/pkg/sentryclient"
 	apps "k8s.io/api/apps/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -53,6 +53,7 @@ func enqueueTo(queue workqueue.RateLimitingInterface) func(interface{}) {
 		var err error
 		if key, err = cache.MetaNamespaceKeyFunc(obj); err != nil {
 			runtime.HandleError(err)
+			sentryclient.SentryErr(err)
 			return
 		}
 		queue.AddRateLimited(key)
@@ -199,6 +200,7 @@ func (c *Controller) processIngress(namespace, name string) error {
 	if err != nil {
 		if errors.IsNotFound(err) {
 			runtime.HandleError(fmt.Errorf("Ingress '%s.%s' in work queue no longer exists", namespace, name))
+			sentryclient.SentryErr(err)
 			return nil
 		}
 
@@ -207,11 +209,13 @@ func (c *Controller) processIngress(namespace, name string) error {
 
 	oldPrometheusRules, err := c.prometheusRulesByIngress(ingress)
 	if err != nil {
+		sentryclient.SentryErr(err)
 		return err
 	}
 
 	newPrometheusRules, err := c.templateManager.CreateFromIngress(ingress)
 	if err != nil {
+		sentryclient.SentryErr(err)
 		return err
 	}
 
@@ -222,6 +226,7 @@ func (c *Controller) processDeployment(namespace, name string) error {
 	deployment, err := c.deploymentLister.Deployments(namespace).Get(name)
 
 	if err != nil {
+		sentryclient.SentryErr(err)
 		if errors.IsNotFound(err) {
 			runtime.HandleError(fmt.Errorf("Deployment '%s.%s' in work queue no longer exists", namespace, name))
 			return nil
@@ -232,12 +237,14 @@ func (c *Controller) processDeployment(namespace, name string) error {
 
 	oldPrometheusRules, err := c.prometheusRulesByDeployment(deployment)
 	if err != nil {
+		sentryclient.SentryErr(err)
 		return err
 	}
 
 	// We have to look up the namespace to decide which Prometheus instance the Deployment should report to
 	deploymentNamespace, err := c.kubeclientset.CoreV1().Namespaces().Get(deployment.GetNamespace(), metav1.GetOptions{})
 	if err != nil {
+		sentryclient.SentryErr(err)
 		if errors.IsNotFound(err) {
 			runtime.HandleError(fmt.Errorf("We were unable to set the alert as the namespace '%s' for deployment '%s' doesn't have the prometheus label", namespace, deployment))
 			return nil
@@ -247,9 +254,10 @@ func (c *Controller) processDeployment(namespace, name string) error {
 
 	deploymentNamespacePrometheus := deploymentNamespace.GetAnnotations()["prometheus"]
 
-	log.Printf("*********   Chosen prometheus is going to be: %s", deploymentNamespacePrometheus)
+	log.Sugar.Debugw("Prometheus instance for alert", "deployment", name, "namespace", namespace, "prometheus", deploymentNamespacePrometheus)
 	newPrometheusRules, err := c.templateManager.CreateFromDeployment(deployment, deploymentNamespacePrometheus)
 	if err != nil {
+		sentryclient.SentryErr(err)
 		return err
 	}
 
@@ -263,10 +271,12 @@ func (c *Controller) syncPrometheusRules(oldPrometheusRules, newPrometheusRules 
 		if oldPrometheusRule, ok := oldPrometheusRulesByKey[GetObjectMetaKey(newPrometheusRule)]; ok {
 			newPrometheusRule.SetResourceVersion(oldPrometheusRule.GetResourceVersion())
 			if _, err := c.promclientset.MonitoringV1().PrometheusRules(newPrometheusRule.GetNamespace()).Update(newPrometheusRule); err != nil {
+				sentryclient.SentryErr(err)
 				return err
 			}
 		} else {
 			if _, err := c.promclientset.MonitoringV1().PrometheusRules(newPrometheusRule.GetNamespace()).Create(newPrometheusRule); err != nil {
+				sentryclient.SentryErr(err)
 				return err
 			}
 		}
@@ -277,6 +287,7 @@ func (c *Controller) syncPrometheusRules(oldPrometheusRules, newPrometheusRules 
 	for _, oldPrometheusRule := range oldPrometheusRules {
 		if _, ok := newPrometheusRulesByKey[GetObjectMetaKey(oldPrometheusRule)]; !ok {
 			if err := c.promclientset.MonitoringV1().PrometheusRules(oldPrometheusRule.GetNamespace()).Delete(oldPrometheusRule.GetName(), nil); err != nil {
+				sentryclient.SentryErr(err)
 				return err
 			}
 		}
@@ -331,11 +342,12 @@ func runner(workqueue workqueue.RateLimitingInterface, processFn func(string, st
 				// Finally, no error has occurred; we Forget this item so it does not
 				// get queued again until another change happens.
 				workqueue.Forget(obj)
-				log.Infof("Successfully synced '%s'", key)
+				log.Sugar.Debugw("Successfully synced", "key", key)
 				return nil
 			}(obj)
 
 			if err != nil {
+				sentryclient.SentryErr(err)
 				runtime.HandleError(err)
 			}
 		}
@@ -349,24 +361,26 @@ func (c *Controller) Run(stopCh <-chan struct{}) error {
 	defer c.promruleWorkqueue.ShutDown()
 
 	// Start the informer factories to begin populating the informer caches
-	log.Info("Starting Heimdall")
+	log.Sugar.Info("Starting Heimdall")
 
 	// Wait for the caches to be synced before starting workers
-	log.Info("Waiting for informer caches to sync")
+	log.Sugar.Info("Waiting for informer caches to sync")
 	if ok := cache.WaitForCacheSync(stopCh, c.ingressSynced, c.promruleSynced); !ok {
-		return fmt.Errorf("failed to wait for caches to sync")
+		errorMessage := "failed to wait for caches to sync"
+		sentryclient.SentryMessage(errorMessage)
+		return fmt.Errorf(errorMessage)
 	}
 
 	ingressRunner := runner(c.ingressWorkqueue, c.processIngress)
 	deploymentRunner := runner(c.deploymentWorkqueue, c.processDeployment)
 
-	log.Info("Starting workers")
+	log.Sugar.Info("Starting workers")
 	go wait.Until(ingressRunner, time.Second, stopCh)
 	go wait.Until(deploymentRunner, time.Second, stopCh)
 
-	log.Info("Started workers")
+	log.Sugar.Info("Started workers")
 	<-stopCh
-	log.Info("Shutting down workers")
+	log.Sugar.Info("Shutting down workers")
 
 	return nil
 }
