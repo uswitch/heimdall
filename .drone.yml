@@ -1,10 +1,6 @@
-workspace:
-  base: /go
-  path: src/github.com/uswitch/heimdall
-
 pipeline:
   test:
-    image: golang:1.12.1-alpine3.9
+    image: golang:1.14-alpine3.9
     commands:
       - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go test -v -cover $(go list ./...)
 
