@@ -252,7 +252,7 @@ func (c *Controller) processDeployment(namespace, name string) error {
 		return err
 	}
 
-	deploymentNamespacePrometheus := deploymentNamespace.GetAnnotations()["prometheus"]
+	deploymentNamespacePrometheus := deploymentNamespace.GetLabels()["prometheus"]
 
 	log.Sugar.Debugw("Prometheus instance for alert", "deployment", name, "namespace", namespace, "prometheus", deploymentNamespacePrometheus)
 	newPrometheusRules, err := c.templateManager.CreateFromDeployment(deployment, deploymentNamespacePrometheus)
