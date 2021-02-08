@@ -21,6 +21,12 @@ import (
 
 var heimPrefix = "com.uswitch.heimdall"
 
+const (
+	environmentAnnotation = "service.rvu.co.uk/environment"
+	criticalityAnnotation = "service.rvu.co.uk/criticality"
+	sensitivityAnnotation = "service.rvu.co.uk/sensitivity"
+)
+
 // PrometheusRuleTemplateManager
 // - contains a map of all the templates in the given templates folder
 type PrometheusRuleTemplateManager struct {
@@ -49,6 +55,9 @@ type templateParameterDeployment struct {
 	Value               string
 	GeneratedLabels     string
 	NSPrometheus        string
+	Environment         string
+	Criticality         string
+	Sensitivity         string
 	Deployment          *apps.Deployment
 }
 
@@ -160,6 +169,9 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1b
 func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.Deployment, depNamespacePrometheus string) ([]*monitoringv1.PrometheusRule, error) {
 	deploymentIdentifier := fmt.Sprintf("%s.%s", deployment.Namespace, deployment.Name)
 
+	criticality := deployment.GetAnnotations()[criticalityAnnotation]
+	environment := deployment.GetAnnotations()[environmentAnnotation]
+	sensitivity := deployment.GetAnnotations()[sensitivityAnnotation]
 	selectorMap := deployment.Spec.Selector.MatchLabels
 
 	var builder strings.Builder
@@ -176,6 +188,9 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 		Namespace:       deployment.Namespace,
 		Name:            deployment.Name,
 		GeneratedLabels: generatedLabels,
+		Criticality:     criticality,
+		Environment:     environment,
+		Sensitivity:     sensitivity,
 		NSPrometheus:    depNamespacePrometheus,
 	}
 
