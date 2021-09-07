@@ -17,6 +17,7 @@ import (
 	prominformers "github.com/coreos/prometheus-operator/pkg/client/informers/externalversions"
 	promclientset "github.com/coreos/prometheus-operator/pkg/client/versioned"
 
+	"github.com/uswitch/heimdall/pkg/controller"
 	"github.com/uswitch/heimdall/pkg/templates"
 )
 
@@ -91,7 +92,7 @@ func main() {
 
 	kubeInformerFactory := kubeinformers.NewFilteredSharedInformerFactory(kubeClient, opts.syncInterval*time.Second, namespace, nil)
 	promInformerFactory := prominformers.NewFilteredSharedInformerFactory(promClient, opts.syncInterval*time.Second, namespace, nil)
-	controller := NewController(
+	controller := controller.NewController(
 		kubeClient, promClient, kubeInformerFactory, promInformerFactory, templateManager,
 	)
 	go kubeInformerFactory.Start(stopCh)
