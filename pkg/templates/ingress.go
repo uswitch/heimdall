@@ -54,13 +54,6 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1b
 			continue
 		}
 
-		params, err := a.resolveIngressOwner(params)
-		if err != nil {
-			warnMessage := fmt.Sprintf("[ingress][%s] error finding owner: %s", ingressIdentifier, err)
-			log.Sugar.Warnf(warnMessage)
-			sentryclient.SentryMessage(warnMessage)
-		}
-
 		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
 		template, ok := a.templates[templateName]
 		if !ok {
@@ -68,6 +61,13 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1b
 			log.Sugar.Warnf(warnMessage)
 			sentryclient.SentryMessage(warnMessage)
 			continue
+		}
+
+		params, err := a.resolveIngressOwner(params)
+		if err != nil {
+			warnMessage := fmt.Sprintf("[ingress][%s] error finding owner: %s", ingressIdentifier, err)
+			log.Sugar.Warnf(warnMessage)
+			sentryclient.SentryMessage(warnMessage)
 		}
 
 		params.Threshold = v
