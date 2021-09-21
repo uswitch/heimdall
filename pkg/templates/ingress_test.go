@@ -1,14 +1,12 @@
 package templates
 
 import (
-	"fmt"
 	"testing"
 
 	log "github.com/uswitch/heimdall/pkg/log"
 	"gotest.tools/assert"
 	is "gotest.tools/assert/cmp"
 
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -45,27 +43,17 @@ var (
 		},
 	}
 
-	testDeployment = &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testApp",
-			Namespace: "testNamespace",
-			Labels:    map[string]string{},
-			Annotations: map[string]string{
-				ownerAnnotation: "testOwner",
-			},
-			OwnerReferences: []metav1.OwnerReference{},
-		},
-		Spec: appsv1.DeploymentSpec{
-			Replicas: new(int32),
-			Selector: &metav1.LabelSelector{},
-		},
-	}
-
 	testIngressDefaultBackend = &extensionsv1beta1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        "testDefaultBackend",
-			Namespace:   "testNamespace",
-			Annotations: map[string]string{"com.uswitch.heimdall/5xx-rate": "0.001"},
+			Name:      "testDefaultBackend",
+			Namespace: "testNamespace",
+			Annotations: map[string]string{
+				"com.uswitch.heimdall/5xx-rate": "0.001",
+				ownerAnnotation:                 "testIngressOwner",
+				environmentAnnotation:           "testing",
+				criticalityAnnotation:           "low",
+				sensitivityAnnotation:           "public",
+			},
 		},
 		Spec: extensionsv1beta1.IngressSpec{
 			Backend: &extensionsv1beta1.IngressBackend{
@@ -129,6 +117,7 @@ func TestIngressAnnotationsDefaultBackend(t *testing.T) {
 	assert.Assert(t, is.Nil(err))
 	assert.Assert(t, is.Len(promrules, 1))
 	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Expr.StrVal, expr)
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["owner"], "testIngressOwner")
 }
 
 func TestIngressAnnotationsRuleBackend(t *testing.T) {
@@ -153,11 +142,10 @@ func TestIngressAnnotationsRuleBackend(t *testing.T) {
 ) > 0.001
 `
 	promrules, err := template.CreateFromIngress(testIngressRuleBackend)
-	fmt.Println(promrules[0])
-
 	assert.Assert(t, is.Nil(err))
 	assert.Assert(t, is.Len(promrules, 1))
 	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Expr.StrVal, expr)
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["owner"], "testDeploymentOwner")
 }
 
 func TestNamesMatch(t *testing.T) {
