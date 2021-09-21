@@ -78,7 +78,7 @@ func main() {
 		sentryclient.SentryErr(err)
 	}
 
-	templateManager, err := templates.NewPrometheusRuleTemplateManager(opts.templates)
+	templateManager, err := templates.NewPrometheusRuleTemplateManager(opts.templates, kubeClient)
 	if err != nil {
 		log.Sugar.Fatalf("Error creating template manager: %s", err.Error())
 		sentryclient.SentryErr(err)
