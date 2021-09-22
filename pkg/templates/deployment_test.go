@@ -16,7 +16,9 @@ var (
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "testApp",
 			Namespace: "testNamespace",
-			Labels:    map[string]string{},
+			Labels: map[string]string{
+				"app": "testApp",
+			},
 			Annotations: map[string]string{
 				ownerAnnotation:       "testDeploymentOwner",
 				environmentAnnotation: "testing",

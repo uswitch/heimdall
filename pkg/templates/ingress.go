@@ -11,6 +11,7 @@ import (
 	apps "k8s.io/api/apps/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/yaml"
 )
@@ -125,18 +126,26 @@ func (a *PrometheusRuleTemplateManager) resolveIngressOwner(params *templatePara
 }
 
 func (a *PrometheusRuleTemplateManager) findServiceDeployment(serviceName, namespace string) (*apps.Deployment, error) {
-	options := metav1.GetOptions{}
-	service, err := a.clientSet.CoreV1().Services(namespace).Get(serviceName, options)
+	getOptions := metav1.GetOptions{}
+
+	service, err := a.clientSet.CoreV1().Services(namespace).Get(serviceName, getOptions)
 	if err != nil {
 		return nil, fmt.Errorf("error getting service: %v", err)
 	}
 
-	deployment, err := a.clientSet.AppsV1().Deployments(namespace).Get(service.Spec.Selector["app"], options)
+	set := labels.Set(service.Spec.Selector)
+	listOptions := metav1.ListOptions{LabelSelector: set.AsSelector().String()}
+
+	deployments, err := a.clientSet.AppsV1().Deployments(namespace).List(listOptions)
 	if err != nil {
-		return nil, fmt.Errorf("error getting deployment: %v", err)
+		return nil, fmt.Errorf("error getting deployments: %v", err)
 	}
 
-	return deployment, nil
+	if len(deployments.Items) != 1 {
+		return nil, fmt.Errorf("could not find 1 deployment for service, got: %v", len(deployments.Items))
+	}
+
+	return &deployments.Items[0], nil
 }
 
 func (p *templateParameterIngress) getIngressService() error {
