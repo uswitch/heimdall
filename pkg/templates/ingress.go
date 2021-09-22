@@ -82,7 +82,7 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1b
 
 		promrule := &monitoringv1.PrometheusRule{}
 
-		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(result.Bytes()), 1024).Decode(promrule); err != nil {
+		if err := yaml.NewYAMLOrJSONDecoder(&result, 1024).Decode(promrule); err != nil {
 			warnMessage := fmt.Sprintf("[ingress][%s] error parsing YAML: %s", ingressIdentifier, err)
 			log.Sugar.Warnf(warnMessage)
 			sentryclient.SentryMessage(warnMessage)
