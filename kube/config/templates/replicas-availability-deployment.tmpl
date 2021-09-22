@@ -16,8 +16,8 @@ spec:
         summary: |
           {{.Identifier}}: Availability proportion over the requested amount of replicas {{.Threshold}} for 5m
       expr: |
-        kube_deployment_status_replicas_available{namespace="{{.Namespace}}", deployment="{{.Name}}"} 
-        /  
+        kube_deployment_status_replicas_available{namespace="{{.Namespace}}", deployment="{{.Name}}"}
+        /
         kube_deployment_spec_replicas{namespace="{{.Namespace}}", deployment="{{.Name}}"} <= {{.Threshold}}
       for: 5m
       labels:
@@ -25,3 +25,7 @@ spec:
         name: {{.Name}}-replicas-availability-deployment
         namespace: {{.Namespace}}
         deployment: {{.Name}}
+        owner: {{.Owner}}
+        environment: {{.Environment}}
+        criticality: {{.Criticality}}
+        sensitivity: {{.Sensitivity}}
