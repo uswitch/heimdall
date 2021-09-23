@@ -8,7 +8,6 @@ import (
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/uswitch/heimdall/pkg/log"
 	"github.com/uswitch/heimdall/pkg/sentryclient"
-	apps "k8s.io/api/apps/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -125,29 +124,6 @@ func (a *PrometheusRuleTemplateManager) resolveIngressOwner(params *templatePara
 	return params, nil
 }
 
-func (a *PrometheusRuleTemplateManager) findServiceDeployment(serviceName, namespace string) (*apps.Deployment, error) {
-	getOptions := metav1.GetOptions{}
-
-	service, err := a.clientSet.CoreV1().Services(namespace).Get(serviceName, getOptions)
-	if err != nil {
-		return nil, fmt.Errorf("error getting service: %v", err)
-	}
-
-	set := labels.Set(service.Spec.Selector)
-	listOptions := metav1.ListOptions{LabelSelector: set.AsSelector().String()}
-
-	deployments, err := a.clientSet.AppsV1().Deployments(namespace).List(listOptions)
-	if err != nil {
-		return nil, fmt.Errorf("error getting deployments: %v", err)
-	}
-
-	if len(deployments.Items) != 1 {
-		return nil, fmt.Errorf("could not find 1 deployment for service, got: %v", len(deployments.Items))
-	}
-
-	return &deployments.Items[0], nil
-}
-
 func (p *templateParameterIngress) getIngressService() error {
 	switch {
 	case len(p.Ingress.Spec.Rules) == 0:
@@ -184,4 +160,126 @@ func checkNamesMatch(services []string) string {
 		}
 	}
 	return services[0]
+}
+
+func (a *PrometheusRuleTemplateManager) findServiceDeployment(serviceName, namespace string) (*metav1.ObjectMeta, error) {
+	service, err := a.clientSet.CoreV1().Services(namespace).Get(serviceName, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("error getting service: %v", err)
+	}
+
+	podOwners, err := a.listPodOwnerReferences(service.Spec.Selector, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("error getting pod owner references: %v", err)
+	}
+
+	replicasetOwners, err := a.getReplicasetOwnerReferences(podOwners, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("error getting replicaset owner references: %v", err)
+	}
+
+	deployments, err := a.getDeployments(replicasetOwners, namespace)
+	if err != nil {
+		return nil, fmt.Errorf("error getting deployments: %v", err)
+	}
+
+	if len(deployments) != 1 {
+		return nil, fmt.Errorf("could not find 1 deployment for service, got: %v", len(deployments))
+	}
+
+	return deployments[0], nil
+}
+
+func (a *PrometheusRuleTemplateManager) listPodOwnerReferences(selector map[string]string, namespace string) (map[string]metav1.OwnerReference, error) {
+	var podsMeta []*metav1.ObjectMeta
+
+	set := labels.Set(selector)
+	listOptions := metav1.ListOptions{LabelSelector: set.AsSelector().String()}
+
+	pods, err := a.clientSet.CoreV1().Pods(namespace).List(listOptions)
+	if err != nil {
+		return nil, fmt.Errorf("error getting pods: %v", err)
+	}
+
+	for _, pod := range pods.Items {
+		podsMeta = append(podsMeta, &pod.ObjectMeta)
+	}
+
+	uniqPodOwnerRef, err := uniqueOwnerReferences(podsMeta)
+	if err != nil {
+		return nil, fmt.Errorf("error getting unique pod owner references: %v", err)
+	}
+
+	return uniqPodOwnerRef, nil
+}
+
+func (a *PrometheusRuleTemplateManager) getReplicasetOwnerReferences(podOwners map[string]metav1.OwnerReference, namespace string) (map[string]metav1.OwnerReference, error) {
+	var replicasetsMeta []*metav1.ObjectMeta
+
+	for _, owner := range podOwners {
+		replicasetMeta, err := a.getAppsObjectMeta(owner.Name, namespace, owner.Kind)
+		if err != nil {
+			return nil, fmt.Errorf("error getting object meta for replicaset: %v", err)
+		}
+
+		replicasetsMeta = append(replicasetsMeta, replicasetMeta)
+	}
+
+	uniqReplicasetOwnerRefs, err := uniqueOwnerReferences(replicasetsMeta)
+	if err != nil {
+		return nil, fmt.Errorf("error getting unique replicaset owner references: %v", err)
+	}
+
+	return uniqReplicasetOwnerRefs, nil
+}
+
+func (a *PrometheusRuleTemplateManager) getDeployments(replicasetOwners map[string]metav1.OwnerReference, namespace string) ([]*metav1.ObjectMeta, error) {
+	uniqDeployments := make(map[string]*metav1.ObjectMeta)
+
+	for _, owner := range replicasetOwners {
+		deploymentMeta, err := a.getAppsObjectMeta(owner.Name, namespace, owner.Kind)
+		if err != nil {
+			return nil, fmt.Errorf("error getting object meta for deployment: %v", err)
+		}
+
+		uniqDeployments[fmt.Sprintf("%s/%s/%s", deploymentMeta.Name, deploymentMeta.Namespace, deploymentMeta.UID)] = deploymentMeta
+	}
+
+	var deployments []*metav1.ObjectMeta
+	for _, d := range uniqDeployments {
+		deployments = append(deployments, d)
+	}
+
+	return deployments, nil
+}
+
+func (a *PrometheusRuleTemplateManager) getAppsObjectMeta(name, namespace, kind string) (*metav1.ObjectMeta, error) {
+	switch {
+	default:
+		return nil, fmt.Errorf("got unrecognised apps kind: %v", kind)
+	case kind == "Deployment":
+		deployment, err := a.clientSet.AppsV1().Deployments(namespace).Get(name, metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("error getting deployment: %v", err)
+		}
+		return &deployment.ObjectMeta, nil
+
+	case kind == "ReplicaSet":
+		replicaset, err := a.clientSet.AppsV1().ReplicaSets(namespace).Get(name, metav1.GetOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("error getting replicaset: %v", err)
+		}
+		return &replicaset.ObjectMeta, nil
+	}
+}
+
+func uniqueOwnerReferences(objects []*metav1.ObjectMeta) (map[string]metav1.OwnerReference, error) {
+	uniqueOwnerReferences := make(map[string]metav1.OwnerReference)
+
+	for _, object := range objects {
+		for _, owner := range object.OwnerReferences {
+			uniqueOwnerReferences[fmt.Sprintf("%s/%s/%s", owner.APIVersion, owner.Kind, owner.Name)] = owner
+		}
+	}
+	return uniqueOwnerReferences, nil
 }

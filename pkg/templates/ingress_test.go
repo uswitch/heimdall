@@ -7,6 +7,7 @@ import (
 	"gotest.tools/assert"
 	is "gotest.tools/assert/cmp"
 
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,23 +16,44 @@ import (
 )
 
 var (
-	testService1 = &corev1.Service{
+	testPod = &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        "testService1",
-			Namespace:   "testNamespace",
-			Annotations: map[string]string{},
-		},
-		Spec: corev1.ServiceSpec{
-			Ports: []corev1.ServicePort{},
-			Selector: map[string]string{
+			Name:      "testPod",
+			Namespace: "testNamespace",
+			Labels: map[string]string{
 				"app": "testApp",
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				metav1.OwnerReference{
+					APIVersion: "apps/v1",
+					Kind:       "ReplicaSet",
+					Name:       "testReplicaSet",
+				},
 			},
 		},
 	}
 
-	testService2 = &corev1.Service{
+	testReplicaset = &appsv1.ReplicaSet{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "ReplicaSet",
+			APIVersion: "apps/v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        "testService2",
+			Name:      "testReplicaSet",
+			Namespace: "testNamespace",
+			OwnerReferences: []metav1.OwnerReference{
+				metav1.OwnerReference{
+					APIVersion: "apps/v1",
+					Kind:       "Deployment",
+					Name:       "testApp",
+				},
+			},
+		},
+	}
+
+	testService = &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "testService",
 			Namespace:   "testNamespace",
 			Annotations: map[string]string{},
 		},
@@ -57,7 +79,7 @@ var (
 		},
 		Spec: extensionsv1beta1.IngressSpec{
 			Backend: &extensionsv1beta1.IngressBackend{
-				ServiceName: "testService1",
+				ServiceName: "testService",
 				ServicePort: intstr.FromInt(80),
 			},
 		},
@@ -79,7 +101,7 @@ var (
 								{
 									Path: "/",
 									Backend: extensionsv1beta1.IngressBackend{
-										ServiceName: "testService2",
+										ServiceName: "testService",
 										ServicePort: intstr.FromInt(80),
 									},
 								},
@@ -95,7 +117,7 @@ var (
 func TestIngressAnnotationsDefaultBackend(t *testing.T) {
 	log.Setup(log.DEBUG_LEVEL)
 
-	client := fake.NewSimpleClientset(testService1, testDeployment)
+	client := fake.NewSimpleClientset(testService, testDeployment, testReplicaset, testPod)
 
 	template, err := NewPrometheusRuleTemplateManager("../../kube/config/templates", client)
 
@@ -123,7 +145,7 @@ func TestIngressAnnotationsDefaultBackend(t *testing.T) {
 func TestIngressAnnotationsRuleBackend(t *testing.T) {
 	log.Setup(log.DEBUG_LEVEL)
 
-	client := fake.NewSimpleClientset(testService2, testDeployment)
+	client := fake.NewSimpleClientset(testService, testDeployment, testReplicaset, testPod)
 
 	template, err := NewPrometheusRuleTemplateManager("../../kube/config/templates", client)
 
