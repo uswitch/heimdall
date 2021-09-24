@@ -205,12 +205,7 @@ func (a *PrometheusRuleTemplateManager) listPodOwnerReferences(selector map[stri
 		podsMeta = append(podsMeta, &pod.ObjectMeta)
 	}
 
-	uniqPodOwnerRef, err := uniqueOwnerReferences(podsMeta)
-	if err != nil {
-		return nil, fmt.Errorf("error getting unique pod owner references: %v", err)
-	}
-
-	return uniqPodOwnerRef, nil
+	return uniqueOwnerReferences(podsMeta), nil
 }
 
 func (a *PrometheusRuleTemplateManager) getReplicasetOwnerReferences(podOwners map[string]metav1.OwnerReference, namespace string) (map[string]metav1.OwnerReference, error) {
@@ -225,12 +220,7 @@ func (a *PrometheusRuleTemplateManager) getReplicasetOwnerReferences(podOwners m
 		replicasetsMeta = append(replicasetsMeta, replicasetMeta)
 	}
 
-	uniqReplicasetOwnerRefs, err := uniqueOwnerReferences(replicasetsMeta)
-	if err != nil {
-		return nil, fmt.Errorf("error getting unique replicaset owner references: %v", err)
-	}
-
-	return uniqReplicasetOwnerRefs, nil
+	return uniqueOwnerReferences(replicasetsMeta), nil
 }
 
 func (a *PrometheusRuleTemplateManager) getDeployments(replicasetOwners map[string]metav1.OwnerReference, namespace string) ([]*metav1.ObjectMeta, error) {
@@ -246,8 +236,8 @@ func (a *PrometheusRuleTemplateManager) getDeployments(replicasetOwners map[stri
 	}
 
 	var deployments []*metav1.ObjectMeta
-	for _, d := range uniqDeployments {
-		deployments = append(deployments, d)
+	for _, deployment := range uniqDeployments {
+		deployments = append(deployments, deployment)
 	}
 
 	return deployments, nil
@@ -273,7 +263,7 @@ func (a *PrometheusRuleTemplateManager) getAppsObjectMeta(name, namespace, kind 
 	}
 }
 
-func uniqueOwnerReferences(objects []*metav1.ObjectMeta) (map[string]metav1.OwnerReference, error) {
+func uniqueOwnerReferences(objects []*metav1.ObjectMeta) map[string]metav1.OwnerReference {
 	uniqueOwnerReferences := make(map[string]metav1.OwnerReference)
 
 	for _, object := range objects {
@@ -281,5 +271,5 @@ func uniqueOwnerReferences(objects []*metav1.ObjectMeta) (map[string]metav1.Owne
 			uniqueOwnerReferences[fmt.Sprintf("%s/%s/%s", owner.APIVersion, owner.Kind, owner.Name)] = owner
 		}
 	}
-	return uniqueOwnerReferences, nil
+	return uniqueOwnerReferences
 }
