@@ -1,21 +1,9 @@
-FROM golang:1.12.1-alpine3.9 as debug
-
-RUN set -ex; \
-    apk add --no-cache \
-        git \
-    ; \
-    CGO_ENABLED=0 go get github.com/derekparker/delve/cmd/dlv;
+FROM gcr.io/distroless/static:nonroot
 
 WORKDIR /
-COPY bin/heimdall heimdall
 
-ENTRYPOINT ["/go/bin/dlv", "--listen=:40000", "--headless=true", "--api-version=2", "exec", "/heimdall", "--"]
+COPY bin/heimdall-linux-amd64 org-api
 
-CMD ["--json"]
-
-FROM scratch as release
-COPY bin/heimdall heimdall
+USER nonroot:nonroot
 
 ENTRYPOINT ["/heimdall"]
-
-CMD ["--json"]
