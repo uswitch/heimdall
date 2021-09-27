@@ -1,13 +1,8 @@
 pipeline:
-  test:
-    image: golang:1.14.9-alpine3.12
-    commands:
-      - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go test -v -cover $(go list ./...)
-
   build:
-    image: golang:1.14.9-alpine3.12
+    image: golang:1.17
     commands:
-      - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/heimdall
+    - make test build
 
   docker-latest:
     image: plugins/docker

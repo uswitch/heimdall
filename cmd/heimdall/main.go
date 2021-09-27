@@ -17,6 +17,7 @@ import (
 	prominformers "github.com/coreos/prometheus-operator/pkg/client/informers/externalversions"
 	promclientset "github.com/coreos/prometheus-operator/pkg/client/versioned"
 
+	"github.com/uswitch/heimdall/pkg/controller"
 	"github.com/uswitch/heimdall/pkg/templates"
 )
 
@@ -24,7 +25,6 @@ type options struct {
 	kubeconfig   string
 	namespace    string
 	debug        bool
-	jsonFormat   bool
 	templates    string
 	syncInterval time.Duration
 }
@@ -39,9 +39,8 @@ func createClientConfig(opts *options) (*rest.Config, error) {
 func main() {
 	opts := &options{}
 	kingpin.Flag("kubeconfig", "Path to kubeconfig.").StringVar(&opts.kubeconfig)
-	kingpin.Flag("namespace", "Namespace to monitor").Default("").StringVar(&opts.namespace)
-	kingpin.Flag("debug", "Debug mode").BoolVar(&opts.debug)
-	kingpin.Flag("json", "Output log data in JSON format").Default("false").BoolVar(&opts.jsonFormat)
+	kingpin.Flag("namespace", "Namespace to monitor").Default(v1.NamespaceAll).StringVar(&opts.namespace)
+	kingpin.Flag("debug", "Debug mode").Default("false").BoolVar(&opts.debug)
 	kingpin.Flag("templates", "Directory for the templates").Default("templates").StringVar(&opts.templates)
 	kingpin.Flag("sync-interval", "Synchronize list of Ingress / Deployments resources this frequently").Default("1m").DurationVar(&opts.syncInterval)
 	kingpin.Parse()
@@ -84,14 +83,9 @@ func main() {
 		sentryclient.SentryErr(err)
 	}
 
-	namespace := opts.namespace
-	if opts.namespace == "" {
-		namespace = v1.NamespaceAll
-	}
-
-	kubeInformerFactory := kubeinformers.NewFilteredSharedInformerFactory(kubeClient, opts.syncInterval*time.Second, namespace, nil)
-	promInformerFactory := prominformers.NewFilteredSharedInformerFactory(promClient, opts.syncInterval*time.Second, namespace, nil)
-	controller := NewController(
+	kubeInformerFactory := kubeinformers.NewFilteredSharedInformerFactory(kubeClient, opts.syncInterval*time.Second, opts.namespace, nil)
+	promInformerFactory := prominformers.NewFilteredSharedInformerFactory(promClient, opts.syncInterval*time.Second, opts.namespace, nil)
+	controller := controller.NewController(
 		kubeClient, promClient, kubeInformerFactory, promInformerFactory, templateManager,
 	)
 	go kubeInformerFactory.Start(stopCh)
