@@ -9,7 +9,7 @@ CMD_SRC = cmd/$(APP)/main.go
 
 SOURCES = $(shell find . -type f -iname "*.go")
 
-.PHONY: all build vet fmt test run image clean private
+.PHONY: all build vet fmt test run image clean
 
 all: test build
 
@@ -24,7 +24,7 @@ build: $(BIN_DARWIN) $(BIN_LINUX) fmt vet
 vet:
 	go vet ./...
 
-fmt: private
+fmt:
 	go fmt ./...
 
 test: fmt vet
