@@ -72,7 +72,6 @@ Your monitoring pipeline would likely depend on Prometheus Operator to:
 --kubeconfig=KUBECONFIG  Path to kubeconfig.
 --namespace=""           Namespace to monitor
 --debug                  Debug mode
---json                   Output log data in JSON format
 --templates="templates"  Directory for the templates
 --sync-interval=1m       Synchronize list of Ingress resources this frequently
 ```

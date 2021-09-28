@@ -14,7 +14,7 @@ pipeline:
       - latest
     when:
       event: push
-      branch: master
+      branch: main
 
   docker-tagged:
     image: plugins/docker
