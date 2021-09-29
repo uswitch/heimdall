@@ -33,7 +33,15 @@ spec:
         identifier: {{.Identifier}}
         name: {{.Name}}-5xx-rate
         namespace: {{.Namespace}}
+        {{if .Owner}}
         owner: {{.Owner}}
+        {{end}}
+        {{if .Environment}}
         environment: {{.Environment}}
+        {{end}}
+        {{if .Criticality}}
         criticality: {{.Criticality}}
+        {{end}}
+        {{if .Sensitivity}}
         sensitivity: {{.Sensitivity}}
+        {{end}}

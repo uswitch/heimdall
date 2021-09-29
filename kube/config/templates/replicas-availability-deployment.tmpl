@@ -25,7 +25,15 @@ spec:
         name: {{.Name}}-replicas-availability-deployment
         namespace: {{.Namespace}}
         deployment: {{.Name}}
+        {{if .Owner}}
         owner: {{.Owner}}
+        {{end}}
+        {{if .Environment}}
         environment: {{.Environment}}
+        {{end}}
+        {{if .Criticality}}
         criticality: {{.Criticality}}
+        {{end}}
+        {{if .Sensitivity}}
         sensitivity: {{.Sensitivity}}
+        {{end}}

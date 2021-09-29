@@ -94,7 +94,7 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 
 		promrule := &monitoringv1.PrometheusRule{}
 
-		if err := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(result.Bytes()), 1024).Decode(promrule); err != nil {
+		if err := yaml.NewYAMLOrJSONDecoder(&result, 1024).Decode(promrule); err != nil {
 			warnMessage := fmt.Sprintf("[deployment][%s] error parsing YAML: %s", deploymentIdentifier, err)
 			log.Sugar.Warnf(warnMessage)
 			sentryclient.SentryMessage(warnMessage)
