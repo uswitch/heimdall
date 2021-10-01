@@ -20,8 +20,6 @@ spec:
       containers:
       - name: heimdall
         image: quay.io/uswitch/heimdall
-        args:
-        - --json
         env:
         - name: GODEBUG
           value: madvdontneed=1
