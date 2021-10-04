@@ -36,6 +36,7 @@ type templateParameterDeployment struct {
 // CreateFromDeployment
 // - Creates all the promRules for a given Deployment
 func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.Deployment, depNamespacePrometheus string) ([]*monitoringv1.PrometheusRule, error) {
+	logger := log.Sugar.With("name", deployment.Name, "namespace", deployment.Namespace, "kind", deployment.Kind)
 	deploymentIdentifier := fmt.Sprintf("%s.%s", deployment.Namespace, deployment.Name)
 
 	owner := deployment.GetAnnotations()[ownerAnnotation]
@@ -50,7 +51,7 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 	}
 	generatedLabels := builder.String()
 
-	log.Sugar.Debugf(" ### generatedLabels for deployment %s: %s", deploymentIdentifier, generatedLabels)
+	logger.Debugw("generated labels", "labels", generatedLabels)
 
 	params := &templateParameterDeployment{
 		Deployment:      deployment,
@@ -74,11 +75,11 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 		}
 
 		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
-		log.Sugar.Infof("\n *** templateName is: %s", templateName)
+		logger.Infow("template selected", "template", templateName)
 		template, ok := a.templates[templateName]
 		if !ok {
 			warnMessage := fmt.Sprintf("[deployment][%s] no template for \"%s\"", deploymentIdentifier, templateName)
-			log.Sugar.Warnf(warnMessage)
+			logger.Warnf(warnMessage)
 			sentryclient.SentryMessage(warnMessage)
 			continue
 		}
@@ -87,7 +88,7 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 		var result bytes.Buffer
 		if err := template.Execute(&result, params); err != nil {
 			warnMessage := fmt.Sprintf("[deployment][%s] error executing template : %s", deploymentIdentifier, err)
-			log.Sugar.Warnf(warnMessage)
+			logger.Warnf(warnMessage)
 			sentryclient.SentryMessage(warnMessage)
 			continue
 		}
@@ -96,7 +97,7 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 
 		if err := yaml.NewYAMLOrJSONDecoder(&result, 1024).Decode(promrule); err != nil {
 			warnMessage := fmt.Sprintf("[deployment][%s] error parsing YAML: %s", deploymentIdentifier, err)
-			log.Sugar.Warnf(warnMessage)
+			logger.Warnf(warnMessage)
 			sentryclient.SentryMessage(warnMessage)
 			continue
 		}
