@@ -8,7 +8,6 @@ import (
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/uswitch/heimdall/pkg/log"
 	"github.com/uswitch/heimdall/pkg/sentryclient"
-	"go.uber.org/zap"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
