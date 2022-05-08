@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+	"time"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/uswitch/heimdall/pkg/log"
@@ -31,6 +32,7 @@ type templateParameterDeployment struct {
 	Criticality         string
 	Sensitivity         string
 	Deployment          *apps.Deployment
+	For		    time.Duration
 }
 
 // CreateFromDeployment
@@ -114,4 +116,23 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 	}
 
 	return collectPrometheusRules(prometheusRules), nil
+}
+
+func templateParams(value string) (TemplateParams, error) {
+	// check if param has form: "[blah],[boop]"
+	// if true
+	params := TemplateParams{}
+
+	split := strings.Split(param, ",")
+	if len(split) == 2 {
+		forValue, err := time.ParseDuration(split[1])
+		if err != nil  {
+			return TemplateParams{}, fmt.Errorf("unable to parse duration from annotation value, %w", err)
+		}
+
+		return TemplateParams{
+			Threshold: split[0],
+			For: forValue,
+		}
+	}
 }

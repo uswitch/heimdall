@@ -33,7 +33,6 @@ type templateParameterIngress struct {
 // CreateFromIngress
 // - Creates all the promRules for a given Ingress
 func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1beta1.Ingress) ([]*monitoringv1.PrometheusRule, error) {
-	logger := log.Sugar.With("name", ingress.Name, "namespace", ingress.Namespace, "kind", ingress.Kind)
 	ingressIdentifier := fmt.Sprintf("%s.%s", ingress.Namespace, ingress.Name)
 
 	params := &templateParameterIngress{
@@ -59,7 +58,7 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1b
 		template, ok := a.templates[templateName]
 		if !ok {
 			warnMessage := fmt.Sprintf("[ingress][%s] no template for \"%s\"", ingressIdentifier, templateName)
-			logger.Warnf(warnMessage)
+			log.Sugar.Warnf(warnMessage)
 			sentryclient.SentryMessage(warnMessage)
 			continue
 		}
@@ -67,7 +66,7 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1b
 		params, err := a.resolveIngressOwner(params)
 		if err != nil {
 			warnMessage := fmt.Sprintf("[ingress][%s] error finding owner: %s", ingressIdentifier, err)
-			logger.Warnf(warnMessage)
+			log.Sugar.Warnf(warnMessage)
 			sentryclient.SentryMessage(warnMessage)
 		}
 
@@ -75,7 +74,7 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1b
 		var result bytes.Buffer
 		if err := template.Execute(&result, params); err != nil {
 			warnMessage := fmt.Sprintf("[ingress][%s] error executing template: %s", ingressIdentifier, err)
-			logger.Warnf(warnMessage)
+			log.Sugar.Warnf(warnMessage)
 			sentryclient.SentryMessage(warnMessage)
 			continue
 		}
@@ -84,7 +83,7 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1b
 
 		if err := yaml.NewYAMLOrJSONDecoder(&result, 1024).Decode(promrule); err != nil {
 			warnMessage := fmt.Sprintf("[ingress][%s] error parsing YAML: %s", ingressIdentifier, err)
-			logger.Warnf(warnMessage)
+			log.Sugar.Warnf(warnMessage)
 			sentryclient.SentryMessage(warnMessage)
 			continue
 		}
