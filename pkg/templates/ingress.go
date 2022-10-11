@@ -2,10 +2,11 @@ package templates
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"strings"
 
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/uswitch/heimdall/pkg/log"
 	"github.com/uswitch/heimdall/pkg/sentryclient"
 	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
@@ -164,7 +165,8 @@ func checkNamesMatch(services []string) string {
 }
 
 func (a *PrometheusRuleTemplateManager) findServiceDeployment(serviceName, namespace string) (*metav1.ObjectMeta, error) {
-	service, err := a.clientSet.CoreV1().Services(namespace).Get(serviceName, metav1.GetOptions{})
+	ctx := context.Background()
+	service, err := a.clientSet.CoreV1().Services(namespace).Get(ctx, serviceName, metav1.GetOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("error getting service: %v", err)
 	}
@@ -193,11 +195,11 @@ func (a *PrometheusRuleTemplateManager) findServiceDeployment(serviceName, names
 
 func (a *PrometheusRuleTemplateManager) listPodOwnerReferences(selector map[string]string, namespace string) (map[string]metav1.OwnerReference, error) {
 	var podsMeta []*metav1.ObjectMeta
-
+	ctx := context.Background()
 	set := labels.Set(selector)
 	listOptions := metav1.ListOptions{LabelSelector: set.AsSelector().String()}
 
-	pods, err := a.clientSet.CoreV1().Pods(namespace).List(listOptions)
+	pods, err := a.clientSet.CoreV1().Pods(namespace).List(ctx, listOptions)
 	if err != nil {
 		return nil, fmt.Errorf("error getting pods: %v", err)
 	}
@@ -245,18 +247,19 @@ func (a *PrometheusRuleTemplateManager) getDeployments(replicasetOwners map[stri
 }
 
 func (a *PrometheusRuleTemplateManager) getAppsObjectMeta(name, namespace, kind string) (*metav1.ObjectMeta, error) {
+	ctx := context.Background()
 	switch {
 	default:
 		return nil, fmt.Errorf("got unrecognised apps kind: %v", kind)
 	case kind == "Deployment":
-		deployment, err := a.clientSet.AppsV1().Deployments(namespace).Get(name, metav1.GetOptions{})
+		deployment, err := a.clientSet.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("error getting deployment: %v", err)
 		}
 		return &deployment.ObjectMeta, nil
 
 	case kind == "ReplicaSet":
-		replicaset, err := a.clientSet.AppsV1().ReplicaSets(namespace).Get(name, metav1.GetOptions{})
+		replicaset, err := a.clientSet.AppsV1().ReplicaSets(namespace).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("error getting replicaset: %v", err)
 		}

@@ -14,8 +14,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 
-	prominformers "github.com/coreos/prometheus-operator/pkg/client/informers/externalversions"
-	promclientset "github.com/coreos/prometheus-operator/pkg/client/versioned"
+	prominformers "github.com/prometheus-operator/prometheus-operator/pkg/client/informers/externalversions"
+	promclientset "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
 
 	"github.com/uswitch/heimdall/pkg/controller"
 	"github.com/uswitch/heimdall/pkg/templates"

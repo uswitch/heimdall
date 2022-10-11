@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -20,15 +21,16 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 
-	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
-	prominformers "github.com/coreos/prometheus-operator/pkg/client/informers/externalversions"
-	promlisters "github.com/coreos/prometheus-operator/pkg/client/listers/monitoring/v1"
-	promclientset "github.com/coreos/prometheus-operator/pkg/client/versioned"
+	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
+	prominformers "github.com/prometheus-operator/prometheus-operator/pkg/client/informers/externalversions"
+	promlisters "github.com/prometheus-operator/prometheus-operator/pkg/client/listers/monitoring/v1"
+	promclientset "github.com/prometheus-operator/prometheus-operator/pkg/client/versioned"
 
 	"github.com/uswitch/heimdall/pkg/templates"
 )
 
 type Controller struct {
+	ctx           context.Context
 	kubeclientset kubernetes.Interface
 	promclientset promclientset.Interface
 
@@ -73,6 +75,7 @@ func NewController(
 	promruleInformer := promInformerFactory.Monitoring().V1().PrometheusRules()
 
 	controller := &Controller{
+		ctx:             context.Background(),
 		kubeclientset:   kubeclientset,
 		promclientset:   promclientset,
 		templateManager: templateManager,
@@ -240,9 +243,8 @@ func (c *Controller) processDeployment(namespace, name string) error {
 		sentryclient.SentryErr(err)
 		return err
 	}
-
 	// We have to look up the namespace to decide which Prometheus instance the Deployment should report to
-	deploymentNamespace, err := c.kubeclientset.CoreV1().Namespaces().Get(deployment.GetNamespace(), metav1.GetOptions{})
+	deploymentNamespace, err := c.kubeclientset.CoreV1().Namespaces().Get(c.ctx, deployment.GetNamespace(), metav1.GetOptions{})
 	if err != nil {
 		sentryclient.SentryErr(err)
 		if errors.IsNotFound(err) {
@@ -270,12 +272,12 @@ func (c *Controller) syncPrometheusRules(oldPrometheusRules, newPrometheusRules 
 	for _, newPrometheusRule := range newPrometheusRules {
 		if oldPrometheusRule, ok := oldPrometheusRulesByKey[GetObjectMetaKey(newPrometheusRule)]; ok {
 			newPrometheusRule.SetResourceVersion(oldPrometheusRule.GetResourceVersion())
-			if _, err := c.promclientset.MonitoringV1().PrometheusRules(newPrometheusRule.GetNamespace()).Update(newPrometheusRule); err != nil {
+			if _, err := c.promclientset.MonitoringV1().PrometheusRules(newPrometheusRule.GetNamespace()).Update(c.ctx, newPrometheusRule, metav1.UpdateOptions{}); err != nil {
 				sentryclient.SentryErr(err)
 				return err
 			}
 		} else {
-			if _, err := c.promclientset.MonitoringV1().PrometheusRules(newPrometheusRule.GetNamespace()).Create(newPrometheusRule); err != nil {
+			if _, err := c.promclientset.MonitoringV1().PrometheusRules(newPrometheusRule.GetNamespace()).Create(c.ctx, newPrometheusRule, metav1.CreateOptions{}); err != nil {
 				sentryclient.SentryErr(err)
 				return err
 			}
@@ -286,7 +288,7 @@ func (c *Controller) syncPrometheusRules(oldPrometheusRules, newPrometheusRules 
 
 	for _, oldPrometheusRule := range oldPrometheusRules {
 		if _, ok := newPrometheusRulesByKey[GetObjectMetaKey(oldPrometheusRule)]; !ok {
-			if err := c.promclientset.MonitoringV1().PrometheusRules(oldPrometheusRule.GetNamespace()).Delete(oldPrometheusRule.GetName(), nil); err != nil {
+			if err := c.promclientset.MonitoringV1().PrometheusRules(oldPrometheusRule.GetNamespace()).Delete(c.ctx, oldPrometheusRule.GetName(), metav1.DeleteOptions{}); err != nil {
 				sentryclient.SentryErr(err)
 				return err
 			}
