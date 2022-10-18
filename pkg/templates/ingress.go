@@ -9,7 +9,7 @@ import (
 	monitoringv1 "github.com/prometheus-operator/prometheus-operator/pkg/apis/monitoring/v1"
 	"github.com/uswitch/heimdall/pkg/log"
 	"github.com/uswitch/heimdall/pkg/sentryclient"
-	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -17,7 +17,7 @@ import (
 )
 
 type templateParameterIngress struct {
-	Ingress        *extensionsv1beta1.Ingress
+	Ingress        *networkingv1.Ingress
 	Identifier     string
 	Threshold      string
 	Namespace      string
@@ -33,7 +33,7 @@ type templateParameterIngress struct {
 
 // CreateFromIngress
 // - Creates all the promRules for a given Ingress
-func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1beta1.Ingress) ([]*monitoringv1.PrometheusRule, error) {
+func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *networkingv1.Ingress) ([]*monitoringv1.PrometheusRule, error) {
 	logger := log.Sugar.With("name", ingress.Name, "namespace", ingress.Namespace, "kind", ingress.Kind)
 	ingressIdentifier := fmt.Sprintf("%s.%s", ingress.Namespace, ingress.Name)
 
@@ -92,8 +92,8 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *extensionsv1b
 
 		promrule.SetOwnerReferences([]metav1.OwnerReference{
 			*metav1.NewControllerRef(ingress, schema.GroupVersionKind{
-				Group:   extensionsv1beta1.SchemeGroupVersion.Group,
-				Version: extensionsv1beta1.SchemeGroupVersion.Version,
+				Group:   networkingv1.SchemeGroupVersion.Group,
+				Version: networkingv1.SchemeGroupVersion.Version,
 				Kind:    "Ingress",
 			}),
 		})
@@ -129,20 +129,20 @@ func (a *PrometheusRuleTemplateManager) resolveIngressOwner(params *templatePara
 func (p *templateParameterIngress) getIngressService() error {
 	switch {
 	case len(p.Ingress.Spec.Rules) == 0:
-		if p.Ingress.Spec.Backend != nil {
-			p.BackendService = p.Ingress.Spec.Backend.ServiceName
+		if p.Ingress.Spec.DefaultBackend != nil {
+			p.BackendService = p.Ingress.Spec.DefaultBackend.Service.Name
 		}
 
 	case len(p.Ingress.Spec.Rules) != 0:
 		var services []string
 		for _, r := range p.Ingress.Spec.Rules {
 			for _, s := range r.IngressRuleValue.HTTP.Paths {
-				services = append(services, s.Backend.ServiceName)
+				services = append(services, s.Backend.Service.Name)
 			}
 		}
 
-		if p.Ingress.Spec.Backend != nil {
-			services = append(services, p.Ingress.Spec.Backend.ServiceName)
+		if p.Ingress.Spec.DefaultBackend != nil {
+			services = append(services, p.Ingress.Spec.DefaultBackend.Service.Name)
 		}
 
 		p.BackendService = checkNamesMatch(services)

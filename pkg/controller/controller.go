@@ -8,7 +8,7 @@ import (
 	log "github.com/uswitch/heimdall/pkg/log"
 	"github.com/uswitch/heimdall/pkg/sentryclient"
 	apps "k8s.io/api/apps/v1"
-	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -17,7 +17,7 @@ import (
 	kubeinformers "k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	lister "k8s.io/client-go/listers/apps/v1"
-	extlisters "k8s.io/client-go/listers/extensions/v1beta1"
+	netlisters "k8s.io/client-go/listers/networking/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 
@@ -36,7 +36,8 @@ type Controller struct {
 
 	templateManager *templates.PrometheusRuleTemplateManager
 
-	ingressLister    extlisters.IngressLister
+	ingressLister netlisters.IngressLister
+
 	ingressSynced    cache.InformerSynced
 	ingressWorkqueue workqueue.RateLimitingInterface
 
@@ -70,7 +71,8 @@ func NewController(
 
 	templateManager *templates.PrometheusRuleTemplateManager) *Controller {
 
-	ingressInformer := kubeInformerFactory.Extensions().V1beta1().Ingresses()
+	ingressInformer := kubeInformerFactory.Networking().V1().Ingresses()
+
 	deploymentInformer := kubeInformerFactory.Apps().V1().Deployments()
 	promruleInformer := promInformerFactory.Monitoring().V1().PrometheusRules()
 
@@ -80,7 +82,8 @@ func NewController(
 		promclientset:   promclientset,
 		templateManager: templateManager,
 
-		ingressLister:    ingressInformer.Lister(),
+		ingressLister: ingressInformer.Lister(),
+
 		ingressSynced:    ingressInformer.Informer().HasSynced,
 		ingressWorkqueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "Ingresses"),
 
@@ -98,9 +101,8 @@ func NewController(
 	ingressInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: enqueueIngress,
 		UpdateFunc: func(old, new interface{}) {
-			oldObj := old.(*extensionsv1beta1.Ingress)
-			newObj := new.(*extensionsv1beta1.Ingress)
-
+			oldObj := old.(*networkingv1.Ingress)
+			newObj := new.(*networkingv1.Ingress)
 			if newObj.ResourceVersion != oldObj.ResourceVersion {
 				enqueueIngress(new)
 			}
@@ -143,7 +145,8 @@ func NewController(
 
 // prometheusRulesByIngress
 // - Accepts an prometheusRulesByIngress and returns all it's PrometheusRules
-func (c *Controller) prometheusRulesByIngress(ingress *extensionsv1beta1.Ingress) ([]*monitoringv1.PrometheusRule, error) {
+func (c *Controller) prometheusRulesByIngress(ingress *networkingv1.Ingress) ([]*monitoringv1.PrometheusRule, error) {
+
 	filteredPrometheusRules := []*monitoringv1.PrometheusRule{}
 
 	prometheusrules, err := c.promruleLister.List(labels.Everything())
