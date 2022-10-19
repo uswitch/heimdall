@@ -9,9 +9,8 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	extensionsv1beta1 "k8s.io/api/extensions/v1beta1"
+	networkingv1 "k8s.io/api/networking/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -65,7 +64,7 @@ var (
 		},
 	}
 
-	testIngressDefaultBackend = &extensionsv1beta1.Ingress{
+	testIngressDefaultBackend = &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "testDefaultBackend",
 			Namespace: "testNamespace",
@@ -77,32 +76,40 @@ var (
 				sensitivityAnnotation:           "public",
 			},
 		},
-		Spec: extensionsv1beta1.IngressSpec{
-			Backend: &extensionsv1beta1.IngressBackend{
-				ServiceName: "testService",
-				ServicePort: intstr.FromInt(80),
+		Spec: networkingv1.IngressSpec{
+			DefaultBackend: &networkingv1.IngressBackend{
+				Service: &networkingv1.IngressServiceBackend{
+					Name: "testService",
+					Port: networkingv1.ServiceBackendPort{
+						Number: 80,
+					},
+				},
 			},
 		},
 	}
 
-	testIngressRuleBackend = &extensionsv1beta1.Ingress{
+	testIngressRuleBackend = &networkingv1.Ingress{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:        "testRuleBackend",
 			Namespace:   "testNamespace",
 			Annotations: map[string]string{"com.uswitch.heimdall/5xx-rate": "0.001"},
 		},
-		Spec: extensionsv1beta1.IngressSpec{
-			Rules: []extensionsv1beta1.IngressRule{
-				extensionsv1beta1.IngressRule{
+		Spec: networkingv1.IngressSpec{
+			Rules: []networkingv1.IngressRule{
+				networkingv1.IngressRule{
 					Host: "test",
-					IngressRuleValue: extensionsv1beta1.IngressRuleValue{
-						HTTP: &extensionsv1beta1.HTTPIngressRuleValue{
-							Paths: []extensionsv1beta1.HTTPIngressPath{
+					IngressRuleValue: networkingv1.IngressRuleValue{
+						HTTP: &networkingv1.HTTPIngressRuleValue{
+							Paths: []networkingv1.HTTPIngressPath{
 								{
 									Path: "/",
-									Backend: extensionsv1beta1.IngressBackend{
-										ServiceName: "testService",
-										ServicePort: intstr.FromInt(80),
+									Backend: networkingv1.IngressBackend{
+										Service: &networkingv1.IngressServiceBackend{
+											Name: "testService",
+											Port: networkingv1.ServiceBackendPort{
+												Number: 80,
+											},
+										},
 									},
 								},
 							},
