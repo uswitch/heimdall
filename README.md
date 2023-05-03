@@ -12,14 +12,14 @@ have a consistent set of PrometheusRules.
 
 Heimdall needs templates for the PrometheusRules it will create. These are
 standard [go template files](https://golang.org/pkg/text/template/). An example
-template can be found [here](./kube/base/templates/). By default,
+template can be found [here](./kube/config/templates/). By default,
 Heimdall will look for a folder called `templates` to find these in. You can
 override this with the `--templates` flag.
 
 ## Example Annotations RVU uses
 
 We do have some custom Prometheus Rules we use, which give you an idea on what alerts we create in an automated fashion.
-These can be deleted, modified and new ones can be created by putting the templates in [this folder](./kube/base/templates/).
+These can be deleted, modified and new ones can be created by putting the templates in [this folder](./kube/config/templates/).
 
 Your Ingress / Deployment must have annotations in the form of:
 `com.uswitch.heimdall/<prometheus-rule-name>: <threshold>`
