@@ -31,6 +31,7 @@ type templateParameterDeployment struct {
 	Criticality         string
 	Sensitivity         string
 	Deployment          *apps.Deployment
+	Priority            string
 }
 
 // CreateFromDeployment
@@ -73,6 +74,8 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 		if !strings.HasPrefix(k, heimPrefix) {
 			continue
 		}
+
+		params.Priority = deployment.GetAnnotations()[priorityAnnotation]
 
 		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
 		logger.Infow("template selected", "template", templateName)
