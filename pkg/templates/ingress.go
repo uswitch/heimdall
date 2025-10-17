@@ -47,7 +47,6 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *networkingv1.
 		Environment: ingress.GetAnnotations()[environmentAnnotation],
 		Criticality: ingress.GetAnnotations()[criticalityAnnotation],
 		Sensitivity: ingress.GetAnnotations()[sensitivityAnnotation],
-		Priority:    ingress.GetAnnotations()[priorityAnnotation],
 	}
 
 	prometheusRules := map[string]*monitoringv1.PrometheusRule{}
@@ -57,6 +56,8 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *networkingv1.
 		if !strings.HasPrefix(k, heimPrefix) {
 			continue
 		}
+
+		params.Priority = ingress.GetAnnotations()[priorityAnnotation]
 
 		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
 		template, ok := a.templates[templateName]
@@ -124,6 +125,7 @@ func (a *PrometheusRuleTemplateManager) resolveIngressOwner(params *templatePara
 	params.Environment = deployment.GetAnnotations()[environmentAnnotation]
 	params.Criticality = deployment.GetAnnotations()[criticalityAnnotation]
 	params.Sensitivity = deployment.GetAnnotations()[sensitivityAnnotation]
+	params.Priority = deployment.GetAnnotations()[priorityAnnotation]
 
 	return params, nil
 }

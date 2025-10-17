@@ -69,12 +69,12 @@ var (
 			Name:      "testDefaultBackend",
 			Namespace: "testNamespace",
 			Annotations: map[string]string{
-				"com.uswitch.heimdall/5xx-rate":       "0.001",
-				"com.uswitch.heimdall/label-priority": "p1",
-				ownerAnnotation:                       "testIngressOwner",
-				environmentAnnotation:                 "testing",
-				criticalityAnnotation:                 "low",
-				sensitivityAnnotation:                 "public",
+				"com.uswitch.heimdall/5xx-rate": "0.001",
+				ownerAnnotation:                 "testIngressOwner",
+				environmentAnnotation:           "testing",
+				criticalityAnnotation:           "low",
+				sensitivityAnnotation:           "public",
+				priorityAnnotation:              "p1",
 			},
 		},
 		Spec: networkingv1.IngressSpec{
