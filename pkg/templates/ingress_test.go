@@ -69,11 +69,12 @@ var (
 			Name:      "testDefaultBackend",
 			Namespace: "testNamespace",
 			Annotations: map[string]string{
-				"com.uswitch.heimdall/5xx-rate": "0.001",
-				ownerAnnotation:                 "testIngressOwner",
-				environmentAnnotation:           "testing",
-				criticalityAnnotation:           "low",
-				sensitivityAnnotation:           "public",
+				"com.uswitch.heimdall/5xx-rate":       "0.001",
+				"com.uswitch.heimdall/label-priority": "p1",
+				ownerAnnotation:                       "testIngressOwner",
+				environmentAnnotation:                 "testing",
+				criticalityAnnotation:                 "low",
+				sensitivityAnnotation:                 "public",
 			},
 		},
 		Spec: networkingv1.IngressSpec{
@@ -147,6 +148,10 @@ func TestIngressAnnotationsDefaultBackend(t *testing.T) {
 	assert.Assert(t, is.Len(promrules, 1))
 	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Expr.StrVal, expr)
 	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["owner"], "testIngressOwner")
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["environment"], "testing")
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["criticality"], "low")
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["sensitivity"], "public")
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["priority"], "p1")
 }
 
 func TestIngressAnnotationsRuleBackend(t *testing.T) {

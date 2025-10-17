@@ -21,6 +21,7 @@ const (
 	environmentAnnotation = "service.rvu.co.uk/environment"
 	criticalityAnnotation = "service.rvu.co.uk/criticality"
 	sensitivityAnnotation = "service.rvu.co.uk/sensitivity"
+	priorityAnnotation    = "com.uswitch.heimdall/label-priority"
 )
 
 // ClientSetI
