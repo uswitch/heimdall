@@ -37,6 +37,6 @@ spec:
         {{if .Sensitivity}}
         sensitivity: {{.Sensitivity}}
         {{end}}
-        {{if .Priority}}
-        priority: {{.Priority}}
+        {{range $key, $value := .CustomLabels}}
+        {{$key}}: {{$value}}
         {{end}}

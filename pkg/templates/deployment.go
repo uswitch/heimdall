@@ -31,7 +31,7 @@ type templateParameterDeployment struct {
 	Criticality         string
 	Sensitivity         string
 	Deployment          *apps.Deployment
-	Priority            string
+	CustomLabels        map[string]string
 }
 
 // CreateFromDeployment
@@ -69,13 +69,17 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 
 	prometheusRules := map[string]*monitoringv1.PrometheusRule{}
 	annotations := params.Deployment.GetAnnotations()
-
 	for k, v := range annotations {
 		if !strings.HasPrefix(k, heimPrefix) {
 			continue
 		}
 
-		params.Priority = deployment.GetAnnotations()[priorityAnnotation]
+		// Skip label-* annotations as they are not templates
+		if strings.HasPrefix(k, labelPrefix) {
+			continue
+		}
+
+		params.CustomLabels = extractCustomLabels(annotations)
 
 		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
 		logger.Infow("template selected", "template", templateName)

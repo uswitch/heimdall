@@ -34,6 +34,31 @@ var (
 			Selector: &metav1.LabelSelector{},
 		},
 	}
+
+	testDeploymentMultiLabel = &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testAppMulti",
+			Namespace: "testNamespace",
+			Labels: map[string]string{
+				"app": "testAppMulti",
+			},
+			Annotations: map[string]string{
+				ownerAnnotation:       "testDeploymentOwner",
+				environmentAnnotation: "testing",
+				criticalityAnnotation: "low",
+				sensitivityAnnotation: "public",
+				"com.uswitch.heimdall/label-priority": "p3",
+				"com.uswitch.heimdall/label-channel":  "testing",
+				"com.uswitch.heimdall/label-team":     "platform",
+				"com.uswitch.heimdall/replicas-availability-deployment": "1",
+			},
+			OwnerReferences: []metav1.OwnerReference{},
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: new(int32),
+			Selector: &metav1.LabelSelector{},
+		},
+	}
 )
 
 func TestDeploymentAnnotations(t *testing.T) {
@@ -56,4 +81,19 @@ kube_deployment_spec_replicas{namespace="testNamespace", deployment="testApp"} <
 	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["criticality"], "low")
 	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["sensitivity"], "public")
 	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["priority"], "p1")
+}
+
+func TestDeploymentMultipleCustomLabels(t *testing.T) {
+	log.Setup(log.DEBUG_LEVEL)
+
+	client := fake.NewSimpleClientset()
+
+	template, err := NewPrometheusRuleTemplateManager("../../kube/config/templates", client)
+
+	promrules, err := template.CreateFromDeployment(testDeploymentMultiLabel, "testNamespace")
+	assert.Assert(t, is.Nil(err))
+	assert.Assert(t, is.Len(promrules, 1))
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["priority"], "p3")
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["channel"], "testing")
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["team"], "platform")
 }

@@ -29,7 +29,7 @@ type templateParameterIngress struct {
 	Criticality    string
 	Sensitivity    string
 	BackendService string
-	Priority       string
+	CustomLabels   map[string]string
 }
 
 // CreateFromIngress
@@ -57,7 +57,12 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *networkingv1.
 			continue
 		}
 
-		params.Priority = ingress.GetAnnotations()[priorityAnnotation]
+		// Skip label-* annotations as they are not templates
+		if strings.HasPrefix(k, labelPrefix) {
+			continue
+		}
+
+		params.CustomLabels = extractCustomLabels(annotations)
 
 		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
 		template, ok := a.templates[templateName]
@@ -125,7 +130,6 @@ func (a *PrometheusRuleTemplateManager) resolveIngressOwner(params *templatePara
 	params.Environment = deployment.GetAnnotations()[environmentAnnotation]
 	params.Criticality = deployment.GetAnnotations()[criticalityAnnotation]
 	params.Sensitivity = deployment.GetAnnotations()[sensitivityAnnotation]
-	params.Priority = deployment.GetAnnotations()[priorityAnnotation]
 
 	return params, nil
 }
