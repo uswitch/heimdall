@@ -29,6 +29,7 @@ type templateParameterIngress struct {
 	Criticality    string
 	Sensitivity    string
 	BackendService string
+	CustomLabels   map[string]string
 }
 
 // CreateFromIngress
@@ -50,9 +51,15 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *networkingv1.
 
 	prometheusRules := map[string]*monitoringv1.PrometheusRule{}
 	annotations := ingress.GetAnnotations()
+	params.CustomLabels = extractCustomLabels(annotations)
 
 	for k, v := range annotations {
 		if !strings.HasPrefix(k, heimPrefix) {
+			continue
+		}
+
+		// Skip label-* annotations as they are not templates
+		if strings.HasPrefix(k, labelPrefix) {
 			continue
 		}
 

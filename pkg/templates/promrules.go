@@ -14,13 +14,17 @@ import (
 	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 )
 
-var heimPrefix = "com.uswitch.heimdall"
+var (
+	heimPrefix  = "com.uswitch.heimdall"
+	labelPrefix = "com.uswitch.heimdall/label-"
+)
 
 const (
 	ownerAnnotation       = "service.rvu.co.uk/owner"
 	environmentAnnotation = "service.rvu.co.uk/environment"
 	criticalityAnnotation = "service.rvu.co.uk/criticality"
 	sensitivityAnnotation = "service.rvu.co.uk/sensitivity"
+	priorityAnnotation    = "com.uswitch.heimdall/label-priority"
 )
 
 // ClientSetI
@@ -78,4 +82,18 @@ func collectPrometheusRules(prometheusRules map[string]*monitoringv1.PrometheusR
 	}
 
 	return ret
+}
+
+// com.uswitch.heimdall/label-priority: p3 -> map["priority"] = "p3"
+func extractCustomLabels(annotations map[string]string) map[string]string {
+	customLabels := make(map[string]string)
+
+	for k, v := range annotations {
+		if strings.HasPrefix(k, labelPrefix) {
+			labelName := strings.TrimPrefix(k, labelPrefix)
+			customLabels[labelName] = v
+		}
+	}
+
+	return customLabels
 }

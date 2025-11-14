@@ -74,6 +74,7 @@ var (
 				environmentAnnotation:           "testing",
 				criticalityAnnotation:           "low",
 				sensitivityAnnotation:           "public",
+				priorityAnnotation:              "p1",
 			},
 		},
 		Spec: networkingv1.IngressSpec{
@@ -119,6 +120,33 @@ var (
 			},
 		},
 	}
+
+	testIngressMultiLabel = &networkingv1.Ingress{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testMultiLabel",
+			Namespace: "testNamespace",
+			Annotations: map[string]string{
+				"com.uswitch.heimdall/5xx-rate":       "0.001",
+				ownerAnnotation:                       "testIngressOwner",
+				environmentAnnotation:                 "testing",
+				criticalityAnnotation:                 "low",
+				sensitivityAnnotation:                 "public",
+				"com.uswitch.heimdall/label-priority": "p2",
+				"com.uswitch.heimdall/label-channel":  "testing",
+				"com.uswitch.heimdall/label-region":   "eu-west-1",
+			},
+		},
+		Spec: networkingv1.IngressSpec{
+			DefaultBackend: &networkingv1.IngressBackend{
+				Service: &networkingv1.IngressServiceBackend{
+					Name: "testService",
+					Port: networkingv1.ServiceBackendPort{
+						Number: 80,
+					},
+				},
+			},
+		},
+	}
 )
 
 func TestIngressAnnotationsDefaultBackend(t *testing.T) {
@@ -147,6 +175,10 @@ func TestIngressAnnotationsDefaultBackend(t *testing.T) {
 	assert.Assert(t, is.Len(promrules, 1))
 	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Expr.StrVal, expr)
 	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["owner"], "testIngressOwner")
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["environment"], "testing")
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["criticality"], "low")
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["sensitivity"], "public")
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["priority"], "p1")
 }
 
 func TestIngressAnnotationsRuleBackend(t *testing.T) {
@@ -186,3 +218,19 @@ func TestNamesMatch(t *testing.T) {
 	service = checkNamesMatch(services)
 	assert.Equal(t, "", service)
 }
+
+func TestIngressMultipleCustomLabels(t *testing.T) {
+	log.Setup(log.DEBUG_LEVEL)
+
+	client := fake.NewSimpleClientset(testService, testDeployment, testReplicaset, testPod)
+
+	template, err := NewPrometheusRuleTemplateManager("../../kube/config/templates", client)
+
+	promrules, err := template.CreateFromIngress(testIngressMultiLabel)
+	assert.Assert(t, is.Nil(err))
+	assert.Assert(t, is.Len(promrules, 1))
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["priority"], "p2")
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["channel"], "testing")
+	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["region"], "eu-west-1")
+}
+
