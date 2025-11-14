@@ -69,6 +69,8 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 
 	prometheusRules := map[string]*monitoringv1.PrometheusRule{}
 	annotations := params.Deployment.GetAnnotations()
+	params.CustomLabels = extractCustomLabels(annotations)
+
 	for k, v := range annotations {
 		if !strings.HasPrefix(k, heimPrefix) {
 			continue
@@ -78,8 +80,6 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 		if strings.HasPrefix(k, labelPrefix) {
 			continue
 		}
-
-		params.CustomLabels = extractCustomLabels(annotations)
 
 		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
 		logger.Infow("template selected", "template", templateName)

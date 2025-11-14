@@ -51,6 +51,7 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *networkingv1.
 
 	prometheusRules := map[string]*monitoringv1.PrometheusRule{}
 	annotations := ingress.GetAnnotations()
+	params.CustomLabels = extractCustomLabels(annotations)
 
 	for k, v := range annotations {
 		if !strings.HasPrefix(k, heimPrefix) {
@@ -61,8 +62,6 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *networkingv1.
 		if strings.HasPrefix(k, labelPrefix) {
 			continue
 		}
-
-		params.CustomLabels = extractCustomLabels(annotations)
 
 		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
 		template, ok := a.templates[templateName]
