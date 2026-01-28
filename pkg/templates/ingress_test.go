@@ -233,4 +233,3 @@ func TestIngressMultipleCustomLabels(t *testing.T) {
 	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["channel"], "testing")
 	assert.Equal(t, promrules[0].Spec.Groups[0].Rules[0].Labels["region"], "eu-west-1")
 }
-

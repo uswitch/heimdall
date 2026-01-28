@@ -81,7 +81,7 @@ func (a *PrometheusRuleTemplateManager) CreateFromDeployment(deployment *apps.De
 			continue
 		}
 
-		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
+		templateName := strings.TrimPrefix(k, fmt.Sprintf("%s/", heimPrefix))
 		logger.Infow("template selected", "template", templateName)
 		template, ok := a.templates[templateName]
 		if !ok {
