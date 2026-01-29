@@ -3,7 +3,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
   name: {{.Namespace}}-{{.Name}}-5xx-rate
-  namespace: ingress
+  namespace: {{.Namespace}}
   labels:
     role: alert-rules
 spec:
