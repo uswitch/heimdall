@@ -83,8 +83,8 @@ func main() {
 		sentryclient.SentryErr(err)
 	}
 
-	kubeInformerFactory := kubeinformers.NewFilteredSharedInformerFactory(kubeClient, opts.syncInterval*time.Second, opts.namespace, nil)
-	promInformerFactory := prominformers.NewFilteredSharedInformerFactory(promClient, opts.syncInterval*time.Second, opts.namespace, nil)
+	kubeInformerFactory := kubeinformers.NewFilteredSharedInformerFactory(kubeClient, opts.syncInterval, opts.namespace, nil)
+	promInformerFactory := prominformers.NewFilteredSharedInformerFactory(promClient, opts.syncInterval, opts.namespace, nil)
 	controller := controller.NewController(
 		kubeClient, promClient, kubeInformerFactory, promInformerFactory, templateManager,
 	)

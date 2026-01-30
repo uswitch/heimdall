@@ -63,7 +63,7 @@ func (a *PrometheusRuleTemplateManager) CreateFromIngress(ingress *networkingv1.
 			continue
 		}
 
-		templateName := strings.TrimLeft(k, fmt.Sprintf("%s/", heimPrefix))
+		templateName := strings.TrimPrefix(k, fmt.Sprintf("%s/", heimPrefix))
 		template, ok := a.templates[templateName]
 		if !ok {
 			warnMessage := fmt.Sprintf("[ingress][%s] no template for \"%s\"", ingressIdentifier, templateName)
